@@ -398,7 +398,7 @@ st.markdown(
 # ==============================================================================
 
 st.sidebar.markdown(
-    "<h2 style='color:#38BDF8 !important; font-weight:700;'>⚡ HR NEXUS</h2>",
+    "<h2 style='color:#38BDF8 !important; font-weight:700;'>⚡ HR EMPLOYEES DERAILS</h2>",
     unsafe_allow_html=True,
 )
 st.sidebar.markdown(
