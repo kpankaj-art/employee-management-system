@@ -1,3 +1,4 @@
+import base64
 import calendar
 from datetime import date, datetime, timedelta
 import os
@@ -192,7 +193,6 @@ def parse_date_input(d_input):
 
 
 def get_computed_status(status, doe, term_date):
-    """Accurate status calculation logic"""
     s_upper = str(status).upper() if status else "ACTIVE"
     if s_upper == "BLACKLISTED":
         return "BLACKLISTED"
@@ -355,6 +355,15 @@ st.markdown(
     .att-a { background-color: #FEE2E2; color: #991B1B; border-color: #FCA5A5; }
     .att-h { background-color: #FFEDD5; color: #C2410C; border-color: #FDBA74; }
     .att-l { background-color: #FEF08A; color: #854D0E; border-color: #FDE047; }
+    
+    .doc-preview-container {
+        background-color: #F8FAFC;
+        border: 1px solid #CBD5E1;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 10px;
+        margin-bottom: 15px;
+    }
     </style>
 """,
     unsafe_allow_html=True,
@@ -725,10 +734,43 @@ if choice == "👥 EMPLOYEES":
                             st.rerun()
 
             with t2:
+                # Add Multiple Documents Form inside Vault
+                with st.expander("➕ UPLOAD NEW DOCUMENTS (MULTIPLE ALLOWED)", expanded=False):
+                    with st.form(f"upload_vault_docs_{v_id}"):
+                        vault_files = st.file_uploader(
+                            "CHOOSE FILES TO UPLOAD",
+                            accept_multiple_files=True,
+                            key=f"vault_uploader_{v_id}"
+                        )
+                        btn_vault_upload = st.form_submit_button("UPLOAD DOCUMENTS", type="primary")
+
+                        if btn_vault_upload and vault_files:
+                            os.makedirs("uploads", exist_ok=True)
+                            conn = get_connection()
+                            cursor = conn.cursor()
+                            u_date = datetime.now().strftime("%Y-%m-%d")
+                            
+                            for f_item in vault_files:
+                                d_title = f_item.name.rsplit('.', 1)[0].upper()
+                                f_path = os.path.join("uploads", f"{v_id}_{f_item.name}")
+                                with open(f_path, "wb") as f_out:
+                                    f_out.write(f_item.getbuffer())
+                                cursor.execute(
+                                    "INSERT INTO documents (emp_id, doc_name, file_path, upload_date) VALUES (?, ?, ?, ?)",
+                                    (v_id, d_title, f_path, u_date),
+                                )
+                            conn.commit()
+                            conn.close()
+                            st.success(f"SUCCESSFULLY UPLOADED {len(vault_files)} DOCUMENT(S)!")
+                            st.rerun()
+
+                st.write("---")
+
                 if df_docs.empty:
                     st.info("NO DOCUMENTS UPLOADED YET.")
                 else:
                     for _, doc_row in df_docs.iterrows():
+                        d_id = doc_row["id"]
                         d_col1, d_col2, d_col3, d_col4 = st.columns([3, 2, 1, 1])
                         d_col1.write(
                             f"**DOC:** {str(doc_row['doc_name']).upper()}"
@@ -738,20 +780,15 @@ if choice == "👥 EMPLOYEES":
                         )
 
                         file_path = doc_row["file_path"]
-                        if file_path and os.path.exists(file_path):
-                            with open(file_path, "rb") as f:
-                                d_col3.download_button(
-                                    "👁️ VIEW",
-                                    f,
-                                    file_name=os.path.basename(file_path),
-                                    key=f"dl_doc_{doc_row['id']}",
-                                )
-                        else:
-                            d_col3.write("FILE MISSING")
+                        view_key = f"toggle_preview_{d_id}"
+
+                        # Toggle view button
+                        if d_col3.button("👁️ VIEW", key=f"btn_view_{d_id}"):
+                            st.session_state[view_key] = not st.session_state.get(view_key, False)
 
                         if d_col4.button(
                             "🗑️",
-                            key=f"del_doc_{doc_row['id']}",
+                            key=f"del_doc_{d_id}",
                             help="DELETE DOCUMENT",
                         ):
                             if file_path and os.path.exists(file_path):
@@ -763,12 +800,59 @@ if choice == "👥 EMPLOYEES":
                             cursor = conn.cursor()
                             cursor.execute(
                                 "DELETE FROM documents WHERE id = ?",
-                                (doc_row["id"],),
+                                (d_id,),
                             )
                             conn.commit()
                             conn.close()
                             st.success("DOCUMENT DELETED!")
                             st.rerun()
+
+                        # INLINE DOCUMENT PREVIEW SECTION
+                        if st.session_state.get(view_key, False):
+                            st.markdown("<div class='doc-preview-container'>", unsafe_allow_html=True)
+                            if file_path and os.path.exists(file_path):
+                                f_ext = file_path.split(".")[-1].lower()
+                                
+                                st.markdown(f"#### 🔍 PREVIEW: {doc_row['doc_name']}")
+                                
+                                # 1. Images
+                                if f_ext in ["png", "jpg", "jpeg", "webp", "gif"]:
+                                    st.image(file_path, use_container_width=True)
+                                
+                                # 2. PDF Files (Render Inline PDF)
+                                elif f_ext == "pdf":
+                                    try:
+                                        with open(file_path, "rb") as pdf_file:
+                                            pdf_bytes = pdf_file.read()
+                                            base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
+                                            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>'
+                                            st.markdown(pdf_display, unsafe_allow_html=True)
+                                    except Exception as e:
+                                        st.error(f"COULD NOT DISPLAY PDF: {e}")
+                                
+                                # 3. Text/CSV Files
+                                elif f_ext in ["txt", "csv", "log"]:
+                                    try:
+                                        with open(file_path, "r", encoding="utf-8", errors="ignore") as txt_file:
+                                            st.code(txt_file.read(4000), language="text")
+                                    except Exception:
+                                        st.info("TEXT PREVIEW NOT AVAILABLE.")
+                                else:
+                                    st.info(f"FILE FORMAT (.{f_ext.upper()}) CANNOT BE PREVIEWED INLINE. PLEASE DOWNLOAD TO VIEW.")
+
+                                st.write(" ")
+                                # Separate Download Button
+                                with open(file_path, "rb") as f_dl:
+                                    st.download_button(
+                                        label="📥 DOWNLOAD DOCUMENT",
+                                        data=f_dl,
+                                        file_name=os.path.basename(file_path),
+                                        key=f"dl_btn_{d_id}",
+                                        type="primary"
+                                    )
+                            else:
+                                st.error("❌ FILE DOES NOT EXIST ON SERVER!")
+                            st.markdown("</div>", unsafe_allow_html=True)
 
             st.write(" ")
             if st.button("❌ CLOSE PROFILE"):
@@ -829,7 +913,7 @@ if choice == "👥 EMPLOYEES":
                     disabled=not term_check,
                 )
 
-                # DOE Date Picker with Checkbox (Fixes unwanted Inactive Status!)
+                # DOE Date Picker with Checkbox
                 has_doe_date = is_valid_date_str(rec.get("doe"))
                 doe_check = s_c3.checkbox("SET DATE OF EXIT (DOE)", value=has_doe_date)
                 default_doe = (
@@ -1009,11 +1093,9 @@ if choice == "👥 EMPLOYEES":
                     u_dob_parsed = parse_date_input(u_dob_val)
                     u_doj_parsed = parse_date_input(u_doj_val)
                     
-                    # Store clean dates or empty strings
                     u_doe_parsed = parse_date_input(u_doe_val) if doe_check else ""
                     u_term_parsed = parse_date_input(u_term_date_val) if term_check else ""
 
-                    # Automatic status computation logic
                     final_status = u_status
                     if is_valid_date_str(u_term_parsed):
                         final_status = "TERMINATED"
@@ -1346,14 +1428,13 @@ elif choice == "➕ ADD / RE-JOIN EMPLOYEE":
         init_serial_no = inv_col2.text_input("SERIAL NUMBER").upper().strip()
 
         st.markdown("---")
-        st.markdown("#### 📄 INITIAL DOCUMENT UPLOAD (OPTIONAL)")
-        doc_col1, doc_col2 = st.columns(2)
-        init_doc_name = (
-            doc_col1.text_input("DOCUMENT TITLE (E.G. OFFER LETTER)")
-            .upper()
-            .strip()
+        st.markdown("#### 📄 INITIAL DOCUMENTS UPLOAD (MULTIPLE ALLOWED)")
+        
+        # Multiple Documents Upload Feature Added Here!
+        init_doc_files = st.file_uploader(
+            "UPLOAD DOCUMENTS (OFFER LETTER, RESUME, PAN, AADHAR ETC.)",
+            accept_multiple_files=True
         )
-        init_doc_file = doc_col2.file_uploader("UPLOAD FILE")
 
         submit = st.form_submit_button("REGISTER EMPLOYEE", type="primary")
 
@@ -1450,23 +1531,20 @@ elif choice == "➕ ADD / RE-JOIN EMPLOYEE":
                                 (emp_id, init_item_name, init_serial_no, j_str),
                             )
 
-                        if init_doc_name and init_doc_file:
+                        # Multiple Documents Save Logic
+                        if init_doc_files:
                             os.makedirs("uploads", exist_ok=True)
-                            f_path = os.path.join(
-                                "uploads", f"{emp_id}_{init_doc_file.name}"
-                            )
-                            with open(f_path, "wb") as f:
-                                f.write(init_doc_file.getbuffer())
+                            up_date = datetime.now().strftime("%Y-%m-%d")
+                            for doc_f in init_doc_files:
+                                doc_title = doc_f.name.rsplit('.', 1)[0].upper()
+                                f_path = os.path.join("uploads", f"{emp_id}_{doc_f.name}")
+                                with open(f_path, "wb") as f_out:
+                                    f_out.write(doc_f.getbuffer())
 
-                            cursor.execute(
-                                "INSERT INTO documents (emp_id, doc_name, file_path, upload_date) VALUES (?, ?, ?, ?)",
-                                (
-                                    emp_id,
-                                    init_doc_name,
-                                    f_path,
-                                    datetime.now().strftime("%Y-%m-%d"),
-                                ),
-                            )
+                                cursor.execute(
+                                    "INSERT INTO documents (emp_id, doc_name, file_path, upload_date) VALUES (?, ?, ?, ?)",
+                                    (emp_id, doc_title, f_path, up_date),
+                                )
 
                         conn.commit()
                         conn.close()
