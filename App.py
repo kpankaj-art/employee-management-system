@@ -90,7 +90,6 @@ def get_connection():
 
 
 def format_days(val):
-  """Helper function to show 3 DAYS instead of 3.0 DAYS"""
   try:
     f_val = float(val)
     if f_val.is_integer():
@@ -101,7 +100,6 @@ def format_days(val):
 
 
 def format_date_display(date_str):
-  """Converts YYYY-MM-DD to DD/MM/YYYY for UI display"""
   if not date_str or date_str in ["N/A", "ACTIVE", "None", ""]:
     return date_str
   try:
@@ -111,7 +109,6 @@ def format_date_display(date_str):
 
 
 def parse_date_input(d_input):
-  """Safely converts string or date object to YYYY-MM-DD string"""
   if isinstance(d_input, (date, datetime)):
     return d_input.strftime("%Y-%m-%d")
   if not d_input:
@@ -200,7 +197,6 @@ def delete_employee(emp_id):
   conn.close()
 
 
-# Standard Departments
 STANDARD_DEPTS = [
     "HR",
     "FINANCE",
@@ -276,12 +272,7 @@ st.sidebar.markdown(
     "<p style='color:#94A3B8 !important; font-size:12px;'>MAIN MENU</p>",
     unsafe_allow_html=True,
 )
-menu = [
-    "👥 EMPLOYEES",
-    "➕ ADD EMPLOYEE",
-    "📊 LEAVE REQUESTS",
-    "💼 INVENTORY & ASSETS",
-]
+menu = ["👥 EMPLOYEES", "➕ ADD EMPLOYEE", "📊 LEAVE REQUESTS"]
 choice = st.sidebar.radio("NAVIGATION", menu, label_visibility="collapsed")
 
 # ==============================================================================
@@ -438,7 +429,7 @@ if choice == "👥 EMPLOYEES":
       del st.session_state["confirm_del_id"]
       st.rerun()
 
-  # VIEW MODAL
+  # VIEW PROFILE MODAL
   if "view_id" in st.session_state:
     v_id = st.session_state["view_id"]
     conn = get_connection()
@@ -520,16 +511,84 @@ if choice == "👥 EMPLOYEES":
       m4.metric("PL BALANCE", format_days(emp_rec.get("pl_balance", 0)))
 
       t1, t2 = st.tabs(["💻 ASSIGNED INVENTORY", "📄 DOCUMENTS VAULT"])
-      with t1:
-        st.dataframe(df_inv, use_container_width=True)
-      with t2:
-        st.dataframe(df_docs, use_container_width=True)
 
+      # INVENTORY TAB WITH DELETE OPTION
+      with t1:
+        if df_inv.empty:
+          st.info("NO INVENTORY ASSIGNED YET.")
+        else:
+          for _, inv_row in df_inv.iterrows():
+            i_col1, i_col2, i_col3, i_col4 = st.columns([3, 3, 2, 1])
+            i_col1.write(f"**ITEM:** {str(inv_row['item_name']).upper()}")
+            i_col2.write(
+                f"**SERIAL:**"
+                f" {str(inv_row['serial_number'] if inv_row['serial_number'] else 'N/A').upper()}"
+            )
+            i_col3.write(
+                f"**DATE:** {format_date_display(inv_row['assigned_date'])}"
+            )
+
+            if i_col4.button(
+                "🗑️", key=f"del_inv_{inv_row['id']}", help="DELETE INVENTORY ITEM"
+            ):
+              conn = get_connection()
+              cursor = conn.cursor()
+              cursor.execute(
+                  "DELETE FROM inventory WHERE id = ?", (inv_row["id"],)
+              )
+              conn.commit()
+              conn.close()
+              st.success("INVENTORY ITEM DELETED!")
+              st.rerun()
+
+      # DOCUMENTS TAB WITH VIEW & DELETE OPTION
+      with t2:
+        if df_docs.empty:
+          st.info("NO DOCUMENTS UPLOADED YET.")
+        else:
+          for _, doc_row in df_docs.iterrows():
+            d_col1, d_col2, d_col3, d_col4 = st.columns([3, 2, 1, 1])
+            d_col1.write(f"**DOC:** {str(doc_row['doc_name']).upper()}")
+            d_col2.write(
+                f"**DATE:** {format_date_display(doc_row['upload_date'])}"
+            )
+
+            file_path = doc_row["file_path"]
+            if file_path and os.path.exists(file_path):
+              with open(file_path, "rb") as f:
+                d_col3.download_button(
+                    "👁️ VIEW",
+                    f,
+                    file_name=os.path.basename(file_path),
+                    key=f"dl_doc_{doc_row['id']}",
+                )
+            else:
+              d_col3.write("FILE MISSING")
+
+            if d_col4.button(
+                "🗑️", key=f"del_doc_{doc_row['id']}", help="DELETE DOCUMENT"
+            ):
+              if file_path and os.path.exists(file_path):
+                try:
+                  os.remove(file_path)
+                except:
+                  pass
+              conn = get_connection()
+              cursor = conn.cursor()
+              cursor.execute(
+                  "DELETE FROM documents WHERE id = ?", (doc_row["id"],)
+              )
+              conn.commit()
+              conn.close()
+              st.success("DOCUMENT DELETED!")
+              st.rerun()
+
+      st.write(" ")
       if st.button("❌ CLOSE PROFILE"):
         del st.session_state["view_id"]
         st.rerun()
 
-  # EDIT MODAL
+  # EDIT DETAILS MODAL
   if "edit_id" in st.session_state:
     ed_id = st.session_state["edit_id"]
     conn = get_connection()
@@ -552,7 +611,6 @@ if choice == "👥 EMPLOYEES":
             "FULL NAME", value=str(rec.get("name", "")).upper()
         ).upper()
 
-        # Department logic for Edit Modal
         existing_dept = str(
             rec.get("department")
             if pd.notna(rec.get("department"))
@@ -717,12 +775,76 @@ if choice == "👥 EMPLOYEES":
           del st.session_state["edit_id"]
           st.rerun()
 
-      if st.button("CANCEL"):
+      # ADD NEW INVENTORY / DOCUMENT SECTION INSIDE EDIT
+      st.markdown("---")
+      st.markdown("##### ➕ ADD ADDITIONAL INVENTORY / DOCUMENT")
+      e_tab1, e_tab2 = st.tabs(
+          ["💻 ADD INVENTORY ITEM", "📄 UPLOAD NEW DOCUMENT"]
+      )
+
+      with e_tab1:
+        with st.form("add_inv_in_edit"):
+          e_inv_item = st.text_input("ITEM NAME (E.G. LAPTOP)").upper().strip()
+          e_inv_serial = st.text_input("SERIAL NUMBER").upper().strip()
+          if st.form_submit_button("ASSIGN NEW ITEM"):
+            if e_inv_item:
+              conn = get_connection()
+              cursor = conn.cursor()
+              cursor.execute(
+                  "INSERT INTO inventory (emp_id, item_name, serial_number,"
+                  " assigned_date, status) VALUES (?, ?, ?, ?, 'ASSIGNED')",
+                  (
+                      ed_id,
+                      e_inv_item,
+                      e_inv_serial,
+                      datetime.now().strftime("%Y-%m-%d"),
+                  ),
+              )
+              conn.commit()
+              conn.close()
+              st.success("NEW INVENTORY ADDED!")
+              st.rerun()
+            else:
+              st.error("PLEASE ENTER ITEM NAME!")
+
+      with e_tab2:
+        with st.form("add_doc_in_edit"):
+          e_doc_title = (
+              st.text_input("DOCUMENT TITLE (E.G. AADHAR CARD)").upper().strip()
+          )
+          e_doc_file = st.file_uploader("CHOOSE FILE")
+          if st.form_submit_button("UPLOAD NEW FILE"):
+            if e_doc_title and e_doc_file:
+              os.makedirs("uploads", exist_ok=True)
+              f_path = os.path.join("uploads", f"{ed_id}_{e_doc_file.name}")
+              with open(f_path, "wb") as f:
+                f.write(e_doc_file.getbuffer())
+              conn = get_connection()
+              cursor = conn.cursor()
+              cursor.execute(
+                  "INSERT INTO documents (emp_id, doc_name, file_path,"
+                  " upload_date) VALUES (?, ?, ?, ?)",
+                  (
+                      ed_id,
+                      e_doc_title,
+                      f_path,
+                      datetime.now().strftime("%Y-%m-%d"),
+                  ),
+              )
+              conn.commit()
+              conn.close()
+              st.success("NEW DOCUMENT SAVED!")
+              st.rerun()
+            else:
+              st.error("PLEASE ENTER TITLE AND CHOOSE A FILE!")
+
+      st.write(" ")
+      if st.button("CLOSE EDIT"):
         del st.session_state["edit_id"]
         st.rerun()
 
 # ==============================================================================
-# 2. ADD NEW EMPLOYEE
+# 2. ADD NEW EMPLOYEE (WITH INTEGRATED INVENTORY & DOCUMENTS)
 # ==============================================================================
 elif choice == "➕ ADD EMPLOYEE":
   st.markdown(
@@ -747,7 +869,6 @@ elif choice == "➕ ADD EMPLOYEE":
     st.markdown("#### 🏢 JOB & POSITION DETAILS")
     c4, c5, c6 = st.columns(3)
 
-    # Department Dropdown with Custom Manual Input Option
     dept_options = STANDARD_DEPTS + ["➕ OTHER (ENTER MANUALLY)"]
     selected_dept = c4.selectbox("DEPARTMENT", dept_options)
     custom_dept = ""
@@ -780,6 +901,22 @@ elif choice == "➕ ADD EMPLOYEE":
         "MONTHLY IN-HAND SALARY (₹)", min_value=0.0, step=1000.0
     )
 
+    st.markdown("---")
+    st.markdown("#### 💻 INITIAL INVENTORY / ASSET ASSIGNMENT (OPTIONAL)")
+    inv_col1, inv_col2 = st.columns(2)
+    init_item_name = inv_col1.text_input(
+        "ITEM NAME (E.G. LAPTOP, MOUSE)"
+    ).upper().strip()
+    init_serial_no = inv_col2.text_input("SERIAL NUMBER").upper().strip()
+
+    st.markdown("---")
+    st.markdown("#### 📄 INITIAL DOCUMENT UPLOAD (OPTIONAL)")
+    doc_col1, doc_col2 = st.columns(2)
+    init_doc_name = doc_col1.text_input(
+        "DOCUMENT TITLE (E.G. OFFER LETTER, AADHAR)"
+    ).upper().strip()
+    init_doc_file = doc_col2.file_uploader("UPLOAD FILE")
+
     submit = st.form_submit_button("REGISTER EMPLOYEE", type="primary")
 
     if submit:
@@ -797,7 +934,6 @@ elif choice == "➕ ADD EMPLOYEE":
         conn = get_connection()
         cursor = conn.cursor()
 
-        # Check Duplicate EMP ID
         cursor.execute("SELECT name FROM employees WHERE emp_id = ?", (emp_id,))
         emp_exist = cursor.fetchone()
 
@@ -809,7 +945,6 @@ elif choice == "➕ ADD EMPLOYEE":
         else:
           duplicate_found = False
 
-          # Check Duplicate PAN
           if pan:
             cursor.execute(
                 "SELECT emp_id, name FROM employees WHERE pan = ?", (pan,)
@@ -822,7 +957,6 @@ elif choice == "➕ ADD EMPLOYEE":
               )
               duplicate_found = True
 
-          # Check Duplicate AADHAR
           if aadhar and not duplicate_found:
             cursor.execute(
                 "SELECT emp_id, name FROM employees WHERE aadhar = ?", (aadhar,)
@@ -842,6 +976,7 @@ elif choice == "➕ ADD EMPLOYEE":
                 "%Y-%m-%d"
             )
 
+            # Insert Employee Record
             cursor.execute(
                 """
                   INSERT INTO employees (emp_id, name, dob, joining_date, doe, aadhar, pan, uan, department, designation, ctc, salary, cl_balance, sl_balance, pl_balance, cycle_start, cycle_end)
@@ -863,6 +998,27 @@ elif choice == "➕ ADD EMPLOYEE":
                     c_end,
                 ),
             )
+
+            # Insert Inventory if entered
+            if init_item_name:
+              cursor.execute(
+                  "INSERT INTO inventory (emp_id, item_name, serial_number,"
+                  " assigned_date, status) VALUES (?, ?, ?, ?, 'ASSIGNED')",
+                  (emp_id, init_item_name, init_serial_no, j_str),
+              )
+
+            # Upload & Insert Document if selected
+            if init_doc_name and init_doc_file:
+              os.makedirs("uploads", exist_ok=True)
+              f_path = os.path.join("uploads", f"{emp_id}_{init_doc_file.name}")
+              with open(f_path, "wb") as f:
+                f.write(init_doc_file.getbuffer())
+              cursor.execute(
+                  "INSERT INTO documents (emp_id, doc_name, file_path,"
+                  " upload_date) VALUES (?, ?, ?, ?)",
+                  (emp_id, init_doc_name, f_path, j_str),
+              )
+
             conn.commit()
             st.success(
                 f"✅ EMPLOYEE '{name}' ({emp_id}) REGISTERED SUCCESSFULLY!"
@@ -982,82 +1138,3 @@ elif choice == "📊 LEAVE REQUESTS":
             else:
               conn.close()
               st.error("EMPLOYEE RECORD NOT FOUND!")
-
-# ==============================================================================
-# 4. INVENTORY & ASSETS
-# ==============================================================================
-elif choice == "💼 INVENTORY & ASSETS":
-  st.markdown(
-      "<p class='page-title'>INVENTORY & DOCUMENT PORTAL</p>",
-      unsafe_allow_html=True,
-  )
-  st.divider()
-
-  conn = get_connection()
-  df_emp = pd.read_sql_query("SELECT emp_id, name FROM employees", conn)
-  conn.close()
-
-  if not df_emp.empty:
-    emp_dict = {
-        f"{str(r['emp_id']).upper()} - {str(r['name']).upper()}": str(
-            r["emp_id"]
-        ).upper()
-        for _, r in df_emp.iterrows()
-    }
-    sel_emp_str = st.selectbox(
-        "SELECT EMPLOYEE FOR ASSETS/DOCS", list(emp_dict.keys())
-    )
-    sel_emp_id = emp_dict[sel_emp_str]
-
-    col_inv, col_doc = st.columns(2)
-
-    with col_inv:
-      st.markdown("#### 💻 ASSIGN INVENTORY ITEM")
-      with st.form("inv_form"):
-        item_name = st.text_input("ITEM NAME (E.G. LAPTOP)").upper()
-        serial_no = st.text_input("SERIAL NUMBER").upper()
-        if st.form_submit_button("ASSIGN ASSET", type="primary"):
-          conn = get_connection()
-          cursor = conn.cursor()
-          cursor.execute(
-              "INSERT INTO inventory (emp_id, item_name, serial_number,"
-              " assigned_date, status) VALUES (?, ?, ?, ?, 'ASSIGNED')",
-              (
-                  sel_emp_id,
-                  item_name,
-                  serial_no,
-                  datetime.now().strftime("%Y-%m-%d"),
-              ),
-          )
-          conn.commit()
-          conn.close()
-          st.success("ASSET ASSIGNED!")
-          st.rerun()
-
-    with col_doc:
-      st.markdown("#### 📄 UPLOAD DOCUMENT")
-      with st.form("doc_form"):
-        doc_name = st.text_input("DOCUMENT TITLE").upper()
-        doc_file = st.file_uploader("UPLOAD DOCUMENT")
-        if st.form_submit_button("UPLOAD DOC", type="primary"):
-          if doc_name and doc_file:
-            os.makedirs("uploads", exist_ok=True)
-            f_path = os.path.join("uploads", f"{sel_emp_id}_{doc_file.name}")
-            with open(f_path, "wb") as f:
-              f.write(doc_file.getbuffer())
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO documents (emp_id, doc_name, file_path,"
-                " upload_date) VALUES (?, ?, ?, ?)",
-                (
-                    sel_emp_id,
-                    doc_name,
-                    f_path,
-                    datetime.now().strftime("%Y-%m-%d"),
-                ),
-            )
-            conn.commit()
-            conn.close()
-            st.success("DOCUMENT SAVED!")
-            st.rerun()
