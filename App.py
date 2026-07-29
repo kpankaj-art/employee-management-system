@@ -9,7 +9,6 @@ import streamlit as st
 # DATABASE SETUP
 # ==============================================================================
 
-
 def init_db():
   conn = sqlite3.connect("employee_management.db")
   cursor = conn.cursor()
@@ -26,7 +25,7 @@ def init_db():
             aadhar TEXT,
             pan TEXT,
             uan TEXT,
-            department TEXT DEFAULT 'ENGINEERING',
+            department TEXT DEFAULT 'DEVELOPMENT',
             designation TEXT DEFAULT 'SOFTWARE ENGINEER',
             ctc REAL DEFAULT 0.0,
             salary REAL DEFAULT 0.0,
@@ -47,7 +46,7 @@ def init_db():
       "aadhar": "TEXT",
       "pan": "TEXT",
       "uan": "TEXT",
-      "department": "TEXT DEFAULT 'ENGINEERING'",
+      "department": "TEXT DEFAULT 'DEVELOPMENT'",
       "designation": "TEXT DEFAULT 'SOFTWARE ENGINEER'",
       "ctc": "REAL DEFAULT 0.0",
       "salary": "REAL DEFAULT 0.0",
@@ -201,6 +200,17 @@ def delete_employee(emp_id):
   conn.close()
 
 
+# Standard Departments
+STANDARD_DEPTS = [
+    "HR",
+    "FINANCE",
+    "OPERATION",
+    "MARKETING",
+    "DESIGN",
+    "DEVELOPMENT",
+    "SALES",
+]
+
 # ==============================================================================
 # UI CONFIGURATION & CUSTOM CSS
 # ==============================================================================
@@ -325,11 +335,14 @@ if choice == "👥 EMPLOYEES":
         label_visibility="collapsed",
     )
 
-    dept_list = ["ALL DEPARTMENTS"] + [
+    db_depts = [
         str(x).upper()
         for x in df_all_emp["department"].dropna().unique()
         if str(x).strip() != ""
     ]
+    all_depts_unique = sorted(list(set(STANDARD_DEPTS + db_depts)))
+    dept_list = ["ALL DEPARTMENTS"] + all_depts_unique
+
     dept_filter = f_col2.selectbox(
         "DEPARTMENT", dept_list, label_visibility="collapsed"
     )
@@ -364,7 +377,7 @@ if choice == "👥 EMPLOYEES":
       dept = str(
           row.get("department")
           if pd.notna(row.get("department"))
-          else "ENGINEERING"
+          else "DEVELOPMENT"
       ).upper()
       designation = str(
           row.get("designation")
@@ -397,7 +410,7 @@ if choice == "👥 EMPLOYEES":
 
         st.divider()
 
-  # DELETE CONFIRMATION MODAL POPUP
+  # DELETE CONFIRMATION MODAL
   if "confirm_del_id" in st.session_state:
     del_emp_id = st.session_state["confirm_del_id"]
     st.warning(
@@ -425,7 +438,7 @@ if choice == "👥 EMPLOYEES":
       del st.session_state["confirm_del_id"]
       st.rerun()
 
-  # VIEW MODAL POPUP
+  # VIEW MODAL
   if "view_id" in st.session_state:
     v_id = st.session_state["view_id"]
     conn = get_connection()
@@ -516,7 +529,7 @@ if choice == "👥 EMPLOYEES":
         del st.session_state["view_id"]
         st.rerun()
 
-  # EDIT MODAL POPUP
+  # EDIT MODAL
   if "edit_id" in st.session_state:
     ed_id = st.session_state["edit_id"]
     conn = get_connection()
@@ -538,14 +551,29 @@ if choice == "👥 EMPLOYEES":
         u_name = e_c1.text_input(
             "FULL NAME", value=str(rec.get("name", "")).upper()
         ).upper()
-        u_dept = e_c2.text_input(
-            "DEPARTMENT",
-            value=str(
-                rec.get("department")
-                if pd.notna(rec.get("department"))
-                else "ENGINEERING"
-            ).upper(),
+
+        # Department logic for Edit Modal
+        existing_dept = str(
+            rec.get("department")
+            if pd.notna(rec.get("department"))
+            else "DEVELOPMENT"
         ).upper()
+        edit_dept_options = STANDARD_DEPTS + ["➕ OTHER (ENTER MANUALLY)"]
+        dept_idx = (
+            edit_dept_options.index(existing_dept)
+            if existing_dept in edit_dept_options
+            else 0
+        )
+
+        sel_u_dept = e_c2.selectbox(
+            "DEPARTMENT", edit_dept_options, index=dept_idx
+        )
+        custom_u_dept = ""
+        if sel_u_dept == "➕ OTHER (ENTER MANUALLY)":
+          custom_u_dept = e_c2.text_input(
+              "ENTER CUSTOM DEPARTMENT NAME", value=existing_dept
+          ).upper()
+
         u_desg = e_c3.text_input(
             "DESIGNATION",
             value=str(
@@ -555,7 +583,6 @@ if choice == "👥 EMPLOYEES":
             ).upper(),
         ).upper()
 
-        # Parse Existing Dates for Picker
         try:
           curr_dob = datetime.strptime(
               str(rec.get("dob")), "%Y-%m-%d"
@@ -634,6 +661,14 @@ if choice == "👥 EMPLOYEES":
         btn_save = st.form_submit_button("💾 SAVE CHANGES", type="primary")
 
         if btn_save:
+          final_u_dept = (
+              custom_u_dept.strip()
+              if sel_u_dept == "➕ OTHER (ENTER MANUALLY)"
+              else sel_u_dept
+          )
+          if not final_u_dept:
+            final_u_dept = "DEVELOPMENT"
+
           u_dob_parsed = parse_date_input(u_dob_val)
           u_doj_parsed = parse_date_input(u_doj_val)
           u_doe_parsed = parse_date_input(u_doe_str)
@@ -657,7 +692,7 @@ if choice == "👥 EMPLOYEES":
                     """,
               (
                   u_name,
-                  u_dept,
+                  final_u_dept,
                   u_desg,
                   u_dob_parsed,
                   u_doj_parsed,
@@ -701,7 +736,6 @@ elif choice == "➕ ADD EMPLOYEE":
     emp_id = c1.text_input("EMPLOYEE ID * (E.G. 4821)").upper().strip()
     name = c2.text_input("FULL NAME *").upper().strip()
 
-    # DOB enabled from 1980 with DD/MM/YYYY Format
     dob = c3.date_input(
         "DATE OF BIRTH (DOB)",
         value=date(1995, 1, 1),
@@ -712,15 +746,20 @@ elif choice == "➕ ADD EMPLOYEE":
 
     st.markdown("#### 🏢 JOB & POSITION DETAILS")
     c4, c5, c6 = st.columns(3)
-    dept = c4.selectbox(
-        "DEPARTMENT",
-        ["ENGINEERING", "PRODUCT DESIGN", "MARKETING", "OPERATIONS", "FINANCE"],
-    )
+
+    # Department Dropdown with Custom Manual Input Option
+    dept_options = STANDARD_DEPTS + ["➕ OTHER (ENTER MANUALLY)"]
+    selected_dept = c4.selectbox("DEPARTMENT", dept_options)
+    custom_dept = ""
+    if selected_dept == "➕ OTHER (ENTER MANUALLY)":
+      custom_dept = c4.text_input(
+          "ENTER CUSTOM DEPARTMENT NAME"
+      ).upper().strip()
+
     designation = c5.text_input(
         "DESIGNATION", value="SOFTWARE ENGINEER"
     ).upper()
 
-    # DOJ with DD/MM/YYYY Format
     joining_date = c6.date_input(
         "DATE OF JOINING (DOJ)",
         value=datetime.now().date(),
@@ -744,13 +783,21 @@ elif choice == "➕ ADD EMPLOYEE":
     submit = st.form_submit_button("REGISTER EMPLOYEE", type="primary")
 
     if submit:
+      final_dept = (
+          custom_dept
+          if selected_dept == "➕ OTHER (ENTER MANUALLY)"
+          else selected_dept
+      )
+
       if not emp_id or not name:
         st.error("❌ EMPLOYEE ID AND NAME ARE MANDATORY!")
+      elif selected_dept == "➕ OTHER (ENTER MANUALLY)" and not custom_dept:
+        st.error("❌ PLEASE ENTER A CUSTOM DEPARTMENT NAME!")
       else:
         conn = get_connection()
         cursor = conn.cursor()
 
-        # 1. Check Duplicate EMP ID
+        # Check Duplicate EMP ID
         cursor.execute("SELECT name FROM employees WHERE emp_id = ?", (emp_id,))
         emp_exist = cursor.fetchone()
 
@@ -762,7 +809,7 @@ elif choice == "➕ ADD EMPLOYEE":
         else:
           duplicate_found = False
 
-          # 2. Check Duplicate PAN (if provided)
+          # Check Duplicate PAN
           if pan:
             cursor.execute(
                 "SELECT emp_id, name FROM employees WHERE pan = ?", (pan,)
@@ -775,7 +822,7 @@ elif choice == "➕ ADD EMPLOYEE":
               )
               duplicate_found = True
 
-          # 3. Check Duplicate AADHAR (if provided)
+          # Check Duplicate AADHAR
           if aadhar and not duplicate_found:
             cursor.execute(
                 "SELECT emp_id, name FROM employees WHERE aadhar = ?", (aadhar,)
@@ -808,7 +855,7 @@ elif choice == "➕ ADD EMPLOYEE":
                     aadhar,
                     pan,
                     uan,
-                    dept,
+                    final_dept,
                     designation,
                     ctc,
                     salary,
