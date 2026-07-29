@@ -5,7 +5,6 @@ import os
 import sqlite3
 from dateutil.relativedelta import relativedelta
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
 # ==============================================================================
@@ -288,7 +287,7 @@ STANDARD_DEPTS = [
 ]
 
 # ==============================================================================
-# MODERN UI & CUSTOM STYLING (SIDEBAR TOGGLE ENABLED)
+# MODERN UI & CUSTOM STYLING
 # ==============================================================================
 
 st.set_page_config(
@@ -309,7 +308,6 @@ st.markdown(
         font-family: 'Inter', sans-serif;
     }
     
-    /* Clean Top Header & Menu */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
 
@@ -326,33 +324,6 @@ st.markdown(
         border-radius: 8px;
     }
 
-    /* Metric Card Custom Styling */
-    .metric-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 16px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    .metric-title {
-        font-size: 13px;
-        font-weight: 600;
-        color: #64748B;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .metric-value {
-        font-size: 28px;
-        font-weight: 700;
-        color: #0F172A;
-        margin-top: 4px;
-    }
-    
     /* Status Pills */
     .status-pill {
         padding: 4px 10px;
@@ -406,7 +377,6 @@ st.sidebar.markdown(
 )
 
 menu = [
-    "📊 DASHBOARD",
     "👥 EMPLOYEES DIRECTORY",
     "📅 ATTENDANCE HUB",
     "➕ ONBOARD EMPLOYEE",
@@ -428,118 +398,9 @@ if not df_all_emp.empty:
     )
 
 # ==============================================================================
-# 1. MODERN DASHBOARD OVERVIEW
+# 1. EMPLOYEES DIRECTORY
 # ==============================================================================
-if choice == "📊 DASHBOARD":
-
-    if df_all_emp.empty:
-        st.info("👋 No employees found in the system. Add your first employee!")
-    else:
-        # Metrics KPI Row
-        total_emp = len(df_all_emp)
-        active_emp = len(df_all_emp[df_all_emp["computed_status"] == "ACTIVE"])
-        inactive_emp = len(
-            df_all_emp[df_all_emp["computed_status"] == "INACTIVE"]
-        )
-        term_emp = len(
-            df_all_emp[df_all_emp["computed_status"] == "TERMINATED"]
-        )
-        black_emp = len(
-            df_all_emp[df_all_emp["computed_status"] == "BLACKLISTED"]
-        )
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.markdown(
-            f"<div class='metric-card'><div class='metric-title'>Total Workforce</div><div class='metric-value'>{total_emp}</div></div>",
-            unsafe_allow_html=True,
-        )
-        c2.markdown(
-            f"<div class='metric-card'><div class='metric-title'>Active</div><div class='metric-value' style='color:#16A34A;'>{active_emp}</div></div>",
-            unsafe_allow_html=True,
-        )
-        c3.markdown(
-            f"<div class='metric-card'><div class='metric-title'>Inactive</div><div class='metric-value' style='color:#D97706;'>{inactive_emp}</div></div>",
-            unsafe_allow_html=True,
-        )
-        c4.markdown(
-            f"<div class='metric-card'><div class='metric-title'>Terminated</div><div class='metric-value' style='color:#DC2626;'>{term_emp}</div></div>",
-            unsafe_allow_html=True,
-        )
-        c5.markdown(
-            f"<div class='metric-card'><div class='metric-title'>Blacklisted</div><div class='metric-value' style='color:#475569;'>{black_emp}</div></div>",
-            unsafe_allow_html=True,
-        )
-
-        st.write(" ")
-        st.write(" ")
-
-        # Visual Analytics Charts Row
-        chart_col1, chart_col2 = st.columns([1, 1])
-
-        with chart_col1:
-            st.markdown("##### 🏢 Department Distribution")
-            dept_counts = (
-                df_all_emp["department"].value_counts().reset_index()
-            )
-            dept_counts.columns = ["Department", "Count"]
-            fig_dept = px.bar(
-                dept_counts,
-                x="Department",
-                y="Count",
-                text="Count",
-                color_discrete_sequence=["#0284C7"],
-            )
-            fig_dept.update_layout(
-                margin=dict(l=10, r=10, t=20, b=10),
-                height=300,
-                xaxis_title="",
-                yaxis_title="",
-            )
-            st.plotly_chart(fig_dept, use_container_width=True)
-
-        with chart_col2:
-            st.markdown("##### 📈 Workforce Status Split")
-            status_counts = (
-                df_all_emp["computed_status"].value_counts().reset_index()
-            )
-            status_counts.columns = ["Status", "Count"]
-            color_map = {
-                "ACTIVE": "#22C55E",
-                "INACTIVE": "#F59E0B",
-                "TERMINATED": "#EF4444",
-                "BLACKLISTED": "#475569",
-            }
-            fig_status = px.pie(
-                status_counts,
-                names="Status",
-                values="Count",
-                hole=0.5,
-                color="Status",
-                color_discrete_map=color_map,
-            )
-            fig_status.update_layout(
-                margin=dict(l=10, r=10, t=20, b=10), height=300
-            )
-            st.plotly_chart(fig_status, use_container_width=True)
-
-        st.divider()
-        st.markdown("##### ⚡ Quick Recent Directory Preview")
-        preview_df = df_all_emp[
-            [
-                "emp_id",
-                "name",
-                "department",
-                "designation",
-                "location",
-                "computed_status",
-            ]
-        ].tail(5)
-        st.dataframe(preview_df, use_container_width=True, hide_index=True)
-
-# ==============================================================================
-# 2. EMPLOYEES DIRECTORY
-# ==============================================================================
-elif choice == "👥 EMPLOYEES DIRECTORY":
+if choice == "👥 EMPLOYEES DIRECTORY":
     col_title, col_actions = st.columns([3, 2])
 
     with col_title:
@@ -1198,7 +1059,7 @@ elif choice == "👥 EMPLOYEES DIRECTORY":
                 st.rerun()
 
 # ==============================================================================
-# 3. ATTENDANCE HUB
+# 2. ATTENDANCE HUB
 # ==============================================================================
 elif choice == "📅 ATTENDANCE HUB":
     st.markdown("## 📅 Attendance Management Calendar")
@@ -1348,7 +1209,7 @@ elif choice == "📅 ATTENDANCE HUB":
                             st.rerun()
 
 # ==============================================================================
-# 4. ONBOARD EMPLOYEE
+# 3. ONBOARD EMPLOYEE
 # ==============================================================================
 elif choice == "➕ ONBOARD EMPLOYEE":
     st.markdown("## ➕ Onboard New Employee")
@@ -1436,7 +1297,7 @@ elif choice == "➕ ONBOARD EMPLOYEE":
                     st.success(f"✅ EMPLOYEE '{name}' REGISTERED SUCCESSFULLY!")
 
 # ==============================================================================
-# 5. LEAVE PORTAL
+# 4. LEAVE PORTAL
 # ==============================================================================
 elif choice == "🌴 LEAVE PORTAL":
     st.markdown("## 🌴 Leave Management Portal")
