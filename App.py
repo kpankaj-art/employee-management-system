@@ -125,12 +125,19 @@ def get_connection():
     return conn
 
 
+def is_valid_date_str(d):
+    if d is None:
+        return False
+    s = str(d).strip().upper()
+    return s not in ["", "NONE", "NAN", "NULL", "N/A"]
+
+
 def calculate_working_days(start_date_str, end_date_str=None):
-    if not start_date_str:
+    if not is_valid_date_str(start_date_str):
         return 0
     try:
         start_dt = datetime.strptime(str(start_date_str), "%Y-%m-%d").date()
-        if end_date_str and str(end_date_str).strip() != "":
+        if is_valid_date_str(end_date_str):
             end_dt = datetime.strptime(str(end_date_str), "%Y-%m-%d").date()
         else:
             end_dt = datetime.now().date()
@@ -160,8 +167,8 @@ def format_days(val):
 
 
 def format_date_display(date_str):
-    if not date_str or date_str in ["N/A", "ACTIVE", "INACTIVE", "None", ""]:
-        return date_str
+    if not is_valid_date_str(date_str):
+        return "N/A"
     try:
         return datetime.strptime(str(date_str), "%Y-%m-%d").strftime(
             "%d/%m/%Y"
@@ -173,7 +180,7 @@ def format_date_display(date_str):
 def parse_date_input(d_input):
     if isinstance(d_input, (date, datetime)):
         return d_input.strftime("%Y-%m-%d")
-    if not d_input:
+    if not d_input or not is_valid_date_str(d_input):
         return ""
     d_str = str(d_input).strip()
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
@@ -181,19 +188,19 @@ def parse_date_input(d_input):
             return datetime.strptime(d_str, fmt).strftime("%Y-%m-%d")
         except ValueError:
             pass
-    return d_str
+    return ""
 
 
 def get_computed_status(status, doe, term_date):
-    """Auto status logic: DOE set -> INACTIVE"""
+    """Accurate status calculation logic"""
     s_upper = str(status).upper() if status else "ACTIVE"
     if s_upper == "BLACKLISTED":
         return "BLACKLISTED"
-    if s_upper == "TERMINATED" or (term_date and str(term_date).strip() != ""):
+    if is_valid_date_str(term_date) or s_upper == "TERMINATED":
         return "TERMINATED"
-    if doe and str(doe).strip() != "":
+    if is_valid_date_str(doe):
         return "INACTIVE"
-    return s_upper
+    return "ACTIVE" if s_upper not in ["INACTIVE", "TERMINATED"] else s_upper
 
 
 def sync_leave_cycles(emp_id, target_date_str=None):
@@ -215,7 +222,7 @@ def sync_leave_cycles(emp_id, target_date_str=None):
 
     if row:
         cl, sl, pl, cycle_start_str, cycle_end_str = row
-        if cycle_end_str:
+        if is_valid_date_str(cycle_end_str):
             try:
                 cycle_end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
                 while target_date >= cycle_end:
@@ -350,6 +357,7 @@ st.markdown(
     .att-p { background-color: #DCFCE7; color: #166534; border-color: #86EFAC; }
     .att-a { background-color: #FEE2E2; color: #991B1B; border-color: #FCA5A5; }
     .att-h { background-color: #FFEDD5; color: #C2410C; border-color: #FDBA74; }
+    .att-l { background-color: #FEF08A; color: #854D0E; border-color: #FDE047; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -651,16 +659,16 @@ if choice == "👥 EMPLOYEES":
             )
 
             col2.write(
-                f"**DOB:** {format_date_display(emp_rec.get('dob') if pd.notna(emp_rec.get('dob')) else 'N/A')}"
+                f"**DOB:** {format_date_display(emp_rec.get('dob'))}"
             )
             col2.write(
-                f"**DOJ:** {format_date_display(emp_rec.get('joining_date') if pd.notna(emp_rec.get('joining_date')) else 'N/A')}"
+                f"**DOJ:** {format_date_display(emp_rec.get('joining_date'))}"
             )
             col2.write(
-                f"**DOE:** {format_date_display(emp_rec.get('doe')) if pd.notna(emp_rec.get('doe')) and str(emp_rec.get('doe')).strip() != '' else 'ACTIVE'}"
+                f"**DOE:** {format_date_display(emp_rec.get('doe')) if is_valid_date_str(emp_rec.get('doe')) else 'ACTIVE'}"
             )
             col2.write(
-                f"**TERMINATION DATE:** {format_date_display(emp_rec.get('termination_date')) if pd.notna(emp_rec.get('termination_date')) and str(emp_rec.get('termination_date')).strip() != '' else 'N/A'}"
+                f"**TERMINATION DATE:** {format_date_display(emp_rec.get('termination_date')) if is_valid_date_str(emp_rec.get('termination_date')) else 'N/A'}"
             )
             col2.write(f"**TOTAL WORKING DAYS:** {working_days_total} DAYS")
 
@@ -814,7 +822,7 @@ if choice == "👥 EMPLOYEES":
                     "TERMINATION DATE (YYYY-MM-DD)",
                     value=str(
                         rec.get("termination_date")
-                        if pd.notna(rec.get("termination_date"))
+                        if is_valid_date_str(rec.get("termination_date"))
                         else ""
                     ),
                     help="Fill if marking as Terminated",
@@ -823,7 +831,9 @@ if choice == "👥 EMPLOYEES":
                 u_doe_str = s_c3.text_input(
                     "DATE OF EXIT / DOE (YYYY-MM-DD)",
                     value=str(
-                        rec.get("doe") if pd.notna(rec.get("doe")) else ""
+                        rec.get("doe")
+                        if is_valid_date_str(rec.get("doe"))
+                        else ""
                     ),
                     help="Filling DOE automatically marks Status as INACTIVE",
                 )
@@ -995,9 +1005,12 @@ if choice == "👥 EMPLOYEES":
                     u_doe_parsed = parse_date_input(u_doe_str)
                     u_term_parsed = parse_date_input(u_term_date)
 
-                    # Auto set INACTIVE if DOE is added
-                    if u_doe_parsed and u_status == "ACTIVE":
-                        u_status = "INACTIVE"
+                    # Auto status assignment
+                    final_status = u_status
+                    if is_valid_date_str(u_term_parsed):
+                        final_status = "TERMINATED"
+                    elif is_valid_date_str(u_doe_parsed):
+                        final_status = "INACTIVE"
 
                     conn = get_connection()
                     cursor = conn.cursor()
@@ -1023,7 +1036,7 @@ if choice == "👥 EMPLOYEES":
                         """,
                         (
                             u_name,
-                            u_status,
+                            final_status,
                             u_p_email,
                             u_o_email,
                             u_location,
@@ -1059,7 +1072,7 @@ if choice == "👥 EMPLOYEES":
                 st.rerun()
 
 # ==============================================================================
-# 2. CALENDAR ATTENDANCE MODULE (WITH SUNDAY & 2ND SATURDAY AUTO-HOLIDAY)
+# 2. CALENDAR ATTENDANCE MODULE (P, A, H, L INTELLIGENT TRACKING)
 # ==============================================================================
 elif choice == "📅 ATTENDANCE":
     st.markdown(
@@ -1067,7 +1080,7 @@ elif choice == "📅 ATTENDANCE":
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p class='page-sub'>AUTOMATIC SUNDAYS & 2ND SATURDAYS ARE HOLIDAYS (🟠 H). CLICK ANY DATE TO MARK P, A, OR H.</p>",
+        "<p class='page-sub'>AUTOMATIC SUNDAYS & 2ND SATURDAYS ARE HOLIDAYS (🟠 H). LEAVES APPEAR AS (🟡 L).</p>",
         unsafe_allow_html=True,
     )
     st.divider()
@@ -1135,10 +1148,11 @@ elif choice == "📅 ATTENDANCE":
         p_count = 0
         a_count = 0
         h_count = 0
+        l_count = 0
 
         final_month_status = {}
 
-        # Sunday & 2nd Saturday Logic Calculation
+        # Calculation of Days
         for week in cal:
             for day in week:
                 if day != 0:
@@ -1148,7 +1162,7 @@ elif choice == "📅 ATTENDANCE":
                     is_sunday = date_obj.weekday() == 6  # Sunday
                     is_second_saturday = (date_obj.weekday() == 5) and (
                         8 <= day <= 14
-                    )  # 2nd Sat
+                    )  # 2nd Saturday
 
                     if date_str in saved_att_dict:
                         st_val = saved_att_dict[date_str]
@@ -1166,13 +1180,16 @@ elif choice == "📅 ATTENDANCE":
                         a_count += 1
                     elif st_val == "H":
                         h_count += 1
+                    elif st_val == "L":
+                        l_count += 1
 
-        # Live Summary Counts Bar
+        # Live Summary Counts Bar (Salary calculation friendly)
         st.write(" ")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("🟢 TOTAL PRESENT (P)", f"{p_count} DAYS")
-        m2.metric("🔴 TOTAL ABSENT (A)", f"{a_count} DAYS")
-        m3.metric("🟠 TOTAL HOLIDAYS (H)", f"{h_count} DAYS")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("🟢 PRESENT (P)", f"{p_count} DAYS")
+        m2.metric("🔴 ABSENT (A)", f"{a_count} DAYS")
+        m3.metric("🟠 HOLIDAY (H)", f"{h_count} DAYS")
+        m4.metric("🟡 LEAVE (L)", f"{l_count} DAYS")
         st.write("---")
 
         st.markdown(f"#### 📅 CALENDAR: {sel_month_name.upper()} {sel_year}")
@@ -1199,6 +1216,8 @@ elif choice == "📅 ATTENDANCE":
                         badge_class = "att-a"
                     elif status_val == "H":
                         badge_class = "att-h"
+                    elif status_val == "L":
+                        badge_class = "att-l"
 
                     with cols[i]:
                         st.markdown(
@@ -1209,10 +1228,17 @@ elif choice == "📅 ATTENDANCE":
                             unsafe_allow_html=True,
                         )
 
+                        att_options = ["P", "A", "H", "L"]
+                        opt_idx = (
+                            att_options.index(status_val)
+                            if status_val in att_options
+                            else 0
+                        )
+
                         new_status = st.selectbox(
                             "STATUS",
-                            ["P", "A", "H"],
-                            index=["P", "A", "H"].index(status_val),
+                            att_options,
+                            index=opt_idx,
                             key=f"att_{selected_emp_id}_{date_str}",
                             label_visibility="collapsed",
                         )
@@ -1442,15 +1468,15 @@ elif choice == "➕ ADD / RE-JOIN EMPLOYEE":
                         )
 
 # ==============================================================================
-# 4. LEAVE REQUESTS & DEDUCTION
+# 4. LEAVE REQUESTS & AUTO ATTENDANCE UPDATE ('L' MARKING)
 # ==============================================================================
 elif choice == "📊 LEAVE REQUESTS":
     st.markdown(
-        "<p class='page-title'>LEAVE REQUESTS MANAGEMENT</p>",
+        "<p class='page-title'>LEAVE REQUESTS & ATTENDANCE AUTO-SYNC</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p class='page-sub'>APPLY AND DEDUCT LEAVE BALANCES FOR EMPLOYEES.</p>",
+        "<p class='page-sub'>APPLY LEAVES, DEDUCT BALANCES, AND AUTOMATICALLY MARK 'L' IN ATTENDANCE CALENDAR.</p>",
         unsafe_allow_html=True,
     )
     st.divider()
@@ -1515,43 +1541,93 @@ elif choice == "📊 LEAVE REQUESTS":
                     "LOP - LOSS OF PAY (UNPAID LEAVE)",
                 ],
             )
-            days_count = st.number_input(
-                "NUMBER OF DAYS TO APPLY", min_value=0.5, step=0.5
+
+            date_c1, date_c2 = st.columns(2)
+            start_date = date_c1.date_input(
+                "LEAVE START DATE",
+                value=datetime.now().date(),
+                format="DD/MM/YYYY",
             )
+            end_date = date_c2.date_input(
+                "LEAVE END DATE",
+                value=datetime.now().date(),
+                format="DD/MM/YYYY",
+            )
+
             leave_reason = st.text_area("REASON FOR LEAVE (OPTIONAL)").strip()
 
             submit_leave = st.form_submit_button(
-                "SUBMIT & DEDUCT LEAVE", type="primary"
+                "SUBMIT & MARK 'L' IN ATTENDANCE", type="primary"
             )
 
             if submit_leave:
-                if "LOP" in l_type:
-                    st.success(
-                        f"✅ LOSS OF PAY (UNPAID LEAVE) RECORDED FOR {days_count} DAYS. NO LEAVE DEDUCTION REQUIRED."
-                    )
+                if start_date > end_date:
+                    st.error("❌ END DATE CANNOT BE BEFORE START DATE!")
                 else:
-                    field = (
-                        "cl_balance"
-                        if "CL" in l_type
-                        else ("sl_balance" if "SL" in l_type else "pl_balance")
-                    )
-                    current_balance = float(curr_emp[field])
+                    # Calculate total days
+                    num_days = (end_date - start_date).days + 1
 
-                    if current_balance < days_count:
-                        st.error(
-                            f"❌ INSUFFICIENT LEAVE BALANCE! AVAILABLE: {current_balance} DAYS."
-                        )
-                    else:
-                        new_balance = current_balance - days_count
+                    if "LOP" in l_type:
+                        # Auto update attendance with L
                         conn = get_connection()
                         cursor = conn.cursor()
-                        cursor.execute(
-                            f"UPDATE employees SET {field} = ? WHERE emp_id = ?",
-                            (new_balance, selected_emp_id),
-                        )
+                        curr_d = start_date
+                        while curr_d <= end_date:
+                            d_str = curr_d.strftime("%Y-%m-%d")
+                            cursor.execute(
+                                "INSERT OR REPLACE INTO attendance (emp_id, att_date, status) VALUES (?, ?, 'L')",
+                                (selected_emp_id, d_str),
+                            )
+                            curr_d += timedelta(days=1)
                         conn.commit()
                         conn.close()
+
                         st.success(
-                            f"✅ LEAVE APPROVED! DEDUCTED {days_count} DAYS FROM {l_type.split()[0]}. NEW BALANCE: {new_balance} DAYS."
+                            f"✅ LOP RECORDED FOR {num_days} DAYS & AUTOMATICALLY MARKED AS 'L' IN CALENDAR!"
                         )
                         st.rerun()
+                    else:
+                        field = (
+                            "cl_balance"
+                            if "CL" in l_type
+                            else (
+                                "sl_balance"
+                                if "SL" in l_type
+                                else "pl_balance"
+                            )
+                        )
+                        current_balance = float(curr_emp[field])
+
+                        if current_balance < num_days:
+                            st.error(
+                                f"❌ INSUFFICIENT LEAVE BALANCE! REQUIRED: {num_days} DAYS, AVAILABLE: {current_balance} DAYS."
+                            )
+                        else:
+                            new_balance = current_balance - num_days
+
+                            conn = get_connection()
+                            cursor = conn.cursor()
+
+                            # 1. Update Leave Balance
+                            cursor.execute(
+                                f"UPDATE employees SET {field} = ? WHERE emp_id = ?",
+                                (new_balance, selected_emp_id),
+                            )
+
+                            # 2. Mark 'L' in Attendance table for dates
+                            curr_d = start_date
+                            while curr_d <= end_date:
+                                d_str = curr_d.strftime("%Y-%m-%d")
+                                cursor.execute(
+                                    "INSERT OR REPLACE INTO attendance (emp_id, att_date, status) VALUES (?, ?, 'L')",
+                                    (selected_emp_id, d_str),
+                                )
+                                curr_d += timedelta(days=1)
+
+                            conn.commit()
+                            conn.close()
+
+                            st.success(
+                                f"✅ LEAVE APPROVED! DEDUCTED {num_days} DAYS FROM {l_type.split()[0]}. NEW BALANCE: {new_balance} DAYS. AUTOMATICALLY MARKED AS 'L' IN ATTENDANCE!"
+                            )
+                            st.rerun()
