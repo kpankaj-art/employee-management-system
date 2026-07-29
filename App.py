@@ -288,7 +288,7 @@ STANDARD_DEPTS = [
 ]
 
 # ==============================================================================
-# MODERN UI & CUSTOM STYLING (FIXED SIDEBAR & HIDDEN ARROW)
+# MODERN UI & CUSTOM STYLING (SIDEBAR TOGGLE ENABLED)
 # ==============================================================================
 
 st.set_page_config(
@@ -309,20 +309,13 @@ st.markdown(
         font-family: 'Inter', sans-serif;
     }
     
-    header {visibility: hidden !important;}
+    /* Clean Top Header & Menu */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
-    [data-testid="stToolbar"] {visibility: hidden !important;}
 
-    /* --- HIDE SIDEBAR TOGGLE ARROW & FIX SIDEBAR --- */
-    [data-testid="collapsedControl"] {
-        display: none !important;
-    }
-    
+    /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #0F172A !important;
-        min-width: 260px !important;
-        max-width: 260px !important;
     }
     [data-testid="stSidebar"] * {
         color: #94A3B8 !important;
