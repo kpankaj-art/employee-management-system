@@ -18,9 +18,16 @@ def init_db():
         CREATE TABLE IF NOT EXISTS employees (
             emp_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            department TEXT DEFAULT 'Engineering',
-            job_title TEXT DEFAULT 'Software Engineer',
+            dob TEXT,
             joining_date TEXT NOT NULL,
+            doe TEXT,
+            aadhar TEXT,
+            pan TEXT,
+            uan TEXT,
+            department TEXT DEFAULT 'ENGINEERING',
+            designation TEXT DEFAULT 'SOFTWARE ENGINEER',
+            ctc REAL DEFAULT 0.0,
+            salary REAL DEFAULT 0.0,
             cl_balance REAL DEFAULT 3.0,
             sl_balance REAL DEFAULT 3.0,
             pl_balance REAL DEFAULT 1.0,
@@ -29,6 +36,25 @@ def init_db():
         )
     """)
 
+  cursor.execute("PRAGMA table_info(employees)")
+  columns = [column[1] for column in cursor.fetchall()]
+
+  new_cols = {
+      "dob": "TEXT",
+      "doe": "TEXT",
+      "aadhar": "TEXT",
+      "pan": "TEXT",
+      "uan": "TEXT",
+      "department": "TEXT DEFAULT 'ENGINEERING'",
+      "designation": "TEXT DEFAULT 'SOFTWARE ENGINEER'",
+      "ctc": "REAL DEFAULT 0.0",
+      "salary": "REAL DEFAULT 0.0",
+  }
+
+  for col, col_type in new_cols.items():
+    if col not in columns:
+      cursor.execute(f"ALTER TABLE employees ADD COLUMN {col} {col_type}")
+
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +62,7 @@ def init_db():
             item_name TEXT,
             serial_number TEXT,
             assigned_date TEXT,
-            status TEXT DEFAULT 'Assigned',
+            status TEXT DEFAULT 'ASSIGNED',
             FOREIGN KEY (emp_id) REFERENCES employees (emp_id) ON DELETE CASCADE
         )
     """)
@@ -77,41 +103,42 @@ def sync_leave_cycles(emp_id, target_date_str=None):
 
   if row:
     cl, sl, pl, cycle_start_str, cycle_end_str = row
-    cycle_end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
+    if cycle_end_str:
+      cycle_end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
 
-    while target_date >= cycle_end:
-      cl += 3.0
-      sl += 3.0
-      pl += 1.0
-      new_cycle_start = cycle_end
-      cycle_end = new_cycle_start + relativedelta(months=6)
+      while target_date >= cycle_end:
+        cl += 3.0
+        sl += 3.0
+        pl += 1.0
+        new_cycle_start = cycle_end
+        cycle_end = new_cycle_start + relativedelta(months=6)
 
-      cursor.execute(
-          """
-                UPDATE employees 
-                SET cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
-                WHERE emp_id = ?
-            """,
-          (
-              cl,
-              sl,
-              pl,
-              new_cycle_start.strftime("%Y-%m-%d"),
-              cycle_end.strftime("%Y-%m-%d"),
-              emp_id,
-          ),
-      )
-      conn.commit()
+        cursor.execute(
+            """
+                    UPDATE employees 
+                    SET cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
+                    WHERE emp_id = ?
+                """,
+            (
+                cl,
+                sl,
+                pl,
+                new_cycle_start.strftime("%Y-%m-%d"),
+                cycle_end.strftime("%Y-%m-%d"),
+                emp_id,
+            ),
+        )
+        conn.commit()
 
   conn.close()
 
 
 # ==============================================================================
-# UI CONFIGURATION & CUSTOM CSS (MATCHING THE IMAGE DESIGN)
+# UI CONFIGURATION & CUSTOM CSS
 # ==============================================================================
 
 st.set_page_config(
-    page_title="Happy HR Portal",
+    page_title="HAPPY HR PORTAL",
     page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -119,11 +146,9 @@ st.set_page_config(
 
 init_db()
 
-# CSS styling for Dark Navy Sidebar & Clean Light Body
 st.markdown(
     """
     <style>
-    /* Dark Theme Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #0F172A !important;
         color: #F8FAFC !important;
@@ -131,49 +156,29 @@ st.markdown(
     [data-testid="stSidebar"] * {
         color: #E2E8F0 !important;
     }
-    
-    /* Main Area Styling */
     .main .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
-    
-    /* Clean Table Header Styling */
-    .header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-    }
-    
     .page-title {
         font-size: 28px;
         font-weight: 700;
         color: #0F172A;
         margin: 0;
+        text-transform: uppercase;
     }
-    
     .page-sub {
         font-size: 14px;
         color: #64748B;
         margin-top: 4px;
+        text-transform: uppercase;
     }
-    
-    /* Card Styles */
-    .metric-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* Primary Action Buttons */
     div.stButton > button[kind="primary"] {
         background-color: #0284C7 !important;
         border: none !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
+        text-transform: uppercase;
     }
     </style>
 """,
@@ -184,32 +189,35 @@ st.markdown(
 # SIDEBAR NAVIGATION
 # ==============================================================================
 st.sidebar.markdown(
-    "<h2 style='color:#38BDF8 !important; margin-bottom: 20px;'>✨ Happy"
+    "<h2 style='color:#38BDF8 !important; margin-bottom: 20px;'>✨ HAPPY"
     " HR</h2>",
     unsafe_allow_html=True,
 )
 
-st.sidebar.markdown("<p style='color:#94A3B8 !important; font-size:12px;'>MAIN MENU</p>", unsafe_allow_html=True)
-menu = ["👥 Employees", "➕ Add Employee", "📊 Leave Requests", "💼 Inventory & Assets"]
-choice = st.sidebar.radio("Navigation", menu, label_visibility="collapsed")
-
-st.sidebar.markdown("<br><hr style='border-color:#1E293B;'><br>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='color:#94A3B8 !important; font-size:12px;'>TEAMS</p>", unsafe_allow_html=True)
-st.sidebar.markdown("🟣 Engineering<br>🔵 Product Design<br>🟡 Marketing<br>🟢 Operations", unsafe_allow_html=True)
+st.sidebar.markdown(
+    "<p style='color:#94A3B8 !important; font-size:12px;'>MAIN MENU</p>",
+    unsafe_allow_html=True,
+)
+menu = [
+    "👥 EMPLOYEES",
+    "➕ ADD EMPLOYEE",
+    "📊 LEAVE REQUESTS",
+    "💼 INVENTORY & ASSETS",
+]
+choice = st.sidebar.radio("NAVIGATION", menu, label_visibility="collapsed")
 
 # ==============================================================================
-# 1. EMPLOYEES LIST VIEW (SAME AS IMAGE DESIGN)
+# 1. EMPLOYEES LIST VIEW
 # ==============================================================================
-if choice == "👥 Employees":
+if choice == "👥 EMPLOYEES":
 
-  # Top Bar Layout
   col_title, col_actions = st.columns([3, 2])
 
   with col_title:
-    st.markdown("<p class='page-title'>Employees</p>", unsafe_allow_html=True)
+    st.markdown("<p class='page-title'>EMPLOYEES</p>", unsafe_allow_html=True)
     st.markdown(
-        "<p class='page-sub'>Manage and view the complete list of employees"
-        " within the organization.</p>",
+        "<p class='page-sub'>MANAGE AND VIEW COMPLETE EMPLOYEE DETAILS WITHIN"
+        " THE ORGANIZATION.</p>",
         unsafe_allow_html=True,
     )
 
@@ -217,19 +225,18 @@ if choice == "👥 Employees":
     st.write(" ")
     btn_col1, btn_col2 = st.columns(2)
 
-    # Global Export Button
     conn = get_connection()
     df_all_emp = pd.read_sql_query("SELECT * FROM employees", conn)
     conn.close()
 
     with btn_col1:
       if not df_all_emp.empty:
-        file_name = "All_Employees_Report.xlsx"
+        file_name = "ALL_EMPLOYEES_REPORT.xlsx"
         with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
-          df_all_emp.to_excel(writer, sheet_name="Employees", index=False)
+          df_all_emp.to_excel(writer, sheet_name="EMPLOYEES", index=False)
         with open(file_name, "rb") as f:
           st.download_button(
-              "📤 Export Data",
+              "📤 EXPORT DATA",
               f,
               file_name=file_name,
               mime=(
@@ -238,86 +245,82 @@ if choice == "👥 Employees":
               use_container_width=True,
           )
 
-    with btn_col2:
-      if st.button("➕ Add Employee", type="primary", use_container_width=True):
-        st.session_state["nav"] = "➕ Add Employee"
-        st.rerun()
-
   st.divider()
 
   if df_all_emp.empty:
-    st.info("Abhi koi employee registered nahi hai. Sidebar se add karein.")
+    st.info("NO EMPLOYEE REGISTERED YET. ADD FROM SIDEBAR.")
   else:
-    # Filter Controls (Like Image)
-    f_col1, f_col2, f_col3 = st.columns([2, 2, 3])
+    f_col1, f_col2 = st.columns([2, 2])
     search_query = f_col1.text_input(
-        "🔎 Search",
-        placeholder="Search Employees by Name, ID...",
-        label_visibility="collapsed",
-    )
-    dept_filter = f_col2.selectbox(
-        "Department",
-        ["All Departments"] + list(df_all_emp["department"].unique()),
+        "🔎 SEARCH",
+        placeholder="SEARCH BY NAME, EMP ID, PAN, AADHAR, UAN...",
         label_visibility="collapsed",
     )
 
-    # Filter Query
+    dept_list = ["ALL DEPARTMENTS"] + [
+        str(x).upper() for x in df_all_emp["department"].dropna().unique()
+    ]
+    dept_filter = f_col2.selectbox(
+        "DEPARTMENT", dept_list, label_visibility="collapsed"
+    )
+
     filtered_df = df_all_emp.copy()
     if search_query:
       filtered_df = filtered_df[
-          filtered_df["name"].str.contains(search_query, case=False)
-          | filtered_df["emp_id"].str.contains(search_query, case=False)
+          filtered_df["name"].str.contains(search_query, case=False, na=False)
+          | filtered_df["emp_id"]
+          .astype(str)
+          .str.contains(search_query, case=False, na=False)
+          | filtered_df["pan"]
+          .astype(str)
+          .str.contains(search_query, case=False, na=False)
+          | filtered_df["aadhar"]
+          .astype(str)
+          .str.contains(search_query, case=False, na=False)
       ]
-    if dept_filter != "All Departments":
-      filtered_df = filtered_df[filtered_df["department"] == dept_filter]
+    if dept_filter != "ALL DEPARTMENTS":
+      filtered_df = filtered_df[
+          filtered_df["department"].str.upper() == dept_filter
+      ]
 
     st.write(" ")
-
-    # TABLE DISPLAY WITH ACTIONS
-    st.markdown("### 📋 Employee Master Directory")
+    st.markdown("### 📋 EMPLOYEE MASTER DIRECTORY")
 
     for _, row in filtered_df.iterrows():
-      emp_id = row["emp_id"]
-      name = row["name"]
-      dept = row["department"]
-      title = row["job_title"]
-      j_date = row["joining_date"]
+      emp_id = str(row["emp_id"]).upper()
+      name = str(row["name"]).upper()
+      dept = str(row.get("department", "ENGINEERING")).upper()
+      designation = str(row.get("designation", "SOFTWARE ENGINEER")).upper()
+      j_date = str(row["joining_date"]).upper()
 
-      # Auto Sync Leave Cycles
       sync_leave_cycles(emp_id)
 
-      # Row Box Design
       with st.container():
-        c_id, c_name, c_dept, c_title, c_date, c_act1, c_act2 = st.columns(
+        c_id, c_name, c_dept, c_desg, c_date, c_act1, c_act2 = st.columns(
             [1.5, 3, 2.5, 3, 2, 1, 1]
         )
 
         c_id.markdown(f"**`{emp_id}`**")
         c_name.markdown(f"**{name}**")
         c_dept.markdown(f"🟢 {dept}")
-        c_title.markdown(f"{title}")
+        c_desg.markdown(f"{designation}")
         c_date.markdown(f"{j_date}")
 
-        # View Details Popup Action Button
-        if c_act1.button("👁️", key=f"view_{emp_id}", help="View Details"):
-          st.session_state["selected_emp_view"] = emp_id
+        if c_act1.button("👁️", key=f"v_{emp_id}", help="VIEW PROFILE"):
+          st.session_state["view_id"] = emp_id
 
-        # Edit Profile Popup Action Button
-        if c_act2.button("✏️", key=f"edit_{emp_id}", help="Edit Employee"):
-          st.session_state["selected_emp_edit"] = emp_id
+        if c_act2.button("✏️", key=f"e_{emp_id}", help="EDIT DETAILS"):
+          st.session_state["edit_id"] = emp_id
 
         st.divider()
 
-  # ------------------------------------------------------------------------------
-  # ACTION MODAL 1: VIEW DETAILS (LEAVES, INVENTORY, DOCS)
-  # ------------------------------------------------------------------------------
-  if "selected_emp_view" in st.session_state:
-    v_id = st.session_state["selected_emp_view"]
+  # VIEW MODAL POPUP
+  if "view_id" in st.session_state:
+    v_id = st.session_state["view_id"]
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM employees WHERE emp_id = ?", (v_id,))
-    emp_rec = cursor.fetchone()
-
+    df_emp_v = pd.read_sql_query(
+        f"SELECT * FROM employees WHERE emp_id = '{v_id}'", conn
+    )
     df_inv = pd.read_sql_query(
         f"SELECT * FROM inventory WHERE emp_id = '{v_id}'", conn
     )
@@ -326,182 +329,214 @@ if choice == "👥 Employees":
     )
     conn.close()
 
-    if emp_rec:
-      e_id, e_name, e_dept, e_job, e_jdate, cl, sl, pl, _, _ = emp_rec
-      j_obj = datetime.strptime(e_jdate, "%Y-%m-%d").date()
+    if not df_emp_v.empty:
+      emp_rec = df_emp_v.iloc[0]
+      j_obj = datetime.strptime(emp_rec["joining_date"], "%Y-%m-%d").date()
       act_date = j_obj + relativedelta(months=3)
       is_act = datetime.now().date() >= act_date
 
-      @st.dialog(f"👤 Employee Details - {e_name} ({e_id})")
-      def show_view_modal():
-        st.markdown(f"**Department:** {e_dept} | **Job Title:** {e_job}")
-        st.markdown(f"**Joining Date:** {e_jdate}")
-        st.write("---")
+      st.markdown(
+          f"### 👤 PROFILE: {str(emp_rec['name']).upper()} ({str(emp_rec['emp_id']).upper()})"
+      )
 
-        # Leave KPI
-        st.markdown("#### 🌴 Leave Balances")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Status", "Active ✅" if is_act else "Probation ⏳")
-        m2.metric("CL Balance", f"{cl} Days")
-        m3.metric("SL Balance", f"{sl} Days")
-        m4.metric("PL Balance", f"{pl} Days")
+      col1, col2, col3 = st.columns(3)
+      col1.write(
+          f"**DEPARTMENT:** {str(emp_rec.get('department', 'N/A')).upper()}"
+      )
+      col1.write(
+          f"**DESIGNATION:** {str(emp_rec.get('designation', 'N/A')).upper()}"
+      )
+      col1.write(f"**DOB:** {str(emp_rec.get('dob', 'N/A')).upper()}")
 
-        st.write("---")
-        t1, t2 = st.tabs(["💻 Assigned Inventory", "📄 Documents"])
+      col2.write(f"**DOJ:** {str(emp_rec.get('joining_date', 'N/A')).upper()}")
+      col2.write(f"**DOE:** {str(emp_rec.get('doe', 'ACTIVE')).upper()}")
+      col2.write(f"**CTC:** ₹{emp_rec.get('ctc', 0.0):,.2f}")
 
-        with t1:
-          if not df_inv.empty:
-            st.dataframe(
-                df_inv[
-                    ["item_name", "serial_number", "assigned_date", "status"]
-                ],
-                use_container_width=True,
-            )
-          else:
-            st.info("No inventory items assigned.")
+      col3.write(f"**AADHAR:** {str(emp_rec.get('aadhar', 'N/A')).upper()}")
+      col3.write(f"**PAN:** {str(emp_rec.get('pan', 'N/A')).upper()}")
+      col3.write(f"**UAN:** {str(emp_rec.get('uan', 'N/A')).upper()}")
 
-        with t2:
-          if not df_docs.empty:
-            st.dataframe(
-                df_docs[["doc_name", "file_path", "upload_date"]],
-                use_container_width=True,
-            )
-          else:
-            st.info("No documents uploaded.")
+      st.write("---")
+      m1, m2, m3, m4 = st.columns(4)
+      m1.metric("STATUS", "ACTIVE ✅" if is_act else "PROBATION ⏳")
+      m2.metric("CL BALANCE", f"{emp_rec['cl_balance']} DAYS")
+      m3.metric("SL BALANCE", f"{emp_rec['sl_balance']} DAYS")
+      m4.metric("PL BALANCE", f"{emp_rec['pl_balance']} DAYS")
 
-        if st.button("Close"):
-          del st.session_state["selected_emp_view"]
-          st.rerun()
+      t1, t2 = st.tabs(["💻 ASSIGNED INVENTORY", "📄 DOCUMENTS VAULT"])
+      with t1:
+        st.dataframe(df_inv, use_container_width=True)
+      with t2:
+        st.dataframe(df_docs, use_container_width=True)
 
-      show_view_modal()
+      if st.button("❌ CLOSE PROFILE"):
+        del st.session_state["view_id"]
+        st.rerun()
 
-  # ------------------------------------------------------------------------------
-  # ACTION MODAL 2: EDIT EMPLOYEE DETAILS
-  # ------------------------------------------------------------------------------
-  if "selected_emp_edit" in st.session_state:
-    ed_id = st.session_state["selected_emp_edit"]
+  # EDIT MODAL POPUP
+  if "edit_id" in st.session_state:
+    ed_id = st.session_state["edit_id"]
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM employees WHERE emp_id = ?", (ed_id,))
-    rec = cursor.fetchone()
+    df_emp_e = pd.read_sql_query(
+        f"SELECT * FROM employees WHERE emp_id = '{ed_id}'", conn
+    )
     conn.close()
 
-    if rec:
-      (
-          e_id,
-          e_name,
-          e_dept,
-          e_job,
-          e_jdate,
-          cl,
-          sl,
-          pl,
-          c_start,
-          c_end,
-      ) = rec
-      j_obj = datetime.strptime(e_jdate, "%Y-%m-%d").date()
+    if not df_emp_e.empty:
+      rec = df_emp_e.iloc[0]
 
-      @st.dialog(f"✏️ Edit Details - {e_name}")
-      def show_edit_modal():
-        with st.form("modal_edit_form"):
-          u_name = st.text_input("Full Name", value=e_name)
-          u_dept = st.selectbox(
-              "Department",
-              [
-                  "Engineering",
-                  "Product Design",
-                  "Marketing",
-                  "Operations",
-                  "Finance",
-              ],
-              index=[
-                  "Engineering",
-                  "Product Design",
-                  "Marketing",
-                  "Operations",
-                  "Finance",
-              ].index(e_dept)
-              if e_dept
-              in [
-                  "Engineering",
-                  "Product Design",
-                  "Marketing",
-                  "Operations",
-                  "Finance",
-              ]
-              else 0,
+      st.markdown(
+          f"### ✏️ EDIT COMPLETE DETAILS: {str(rec['name']).upper()}"
+      )
+
+      with st.form("edit_emp_form_full"):
+        e_c1, e_c2, e_c3 = st.columns(3)
+
+        u_name = e_c1.text_input(
+            "FULL NAME", value=str(rec["name"]).upper()
+        ).upper()
+        u_dept = e_c2.text_input(
+            "DEPARTMENT",
+            value=str(rec.get("department", "ENGINEERING")).upper(),
+        ).upper()
+        u_desg = e_c3.text_input(
+            "DESIGNATION",
+            value=str(rec.get("designation", "SOFTWARE ENGINEER")).upper(),
+        ).upper()
+
+        u_dob = e_c1.text_input(
+            "DOB (YYYY-MM-DD)", value=str(rec.get("dob", ""))
+        )
+        u_doj = e_c2.text_input("DOJ (YYYY-MM-DD)", value=str(rec["joining_date"]))
+        u_doe = e_c3.text_input(
+            "DOE (YYYY-MM-DD / EMPTY)", value=str(rec.get("doe", ""))
+        )
+
+        u_aadhar = e_c1.text_input(
+            "AADHAR CARD", value=str(rec.get("aadhar", "")).upper()
+        ).upper()
+        u_pan = e_c2.text_input(
+            "PAN CARD", value=str(rec.get("pan", "")).upper()
+        ).upper()
+        u_uan = e_c3.text_input(
+            "UAN NUMBER", value=str(rec.get("uan", "")).upper()
+        ).upper()
+
+        u_ctc = e_c1.number_input(
+            "CTC (ANNUAL)", value=float(rec.get("ctc", 0.0))
+        )
+        u_salary = e_c2.number_input(
+            "IN-HAND SALARY (MONTHLY)", value=float(rec.get("salary", 0.0))
+        )
+
+        st.markdown("##### 🌴 EDIT LEAVE BALANCES")
+        l_c1, l_c2, l_c3 = st.columns(3)
+        u_cl = l_c1.number_input(
+            "CL BALANCE", value=float(rec["cl_balance"]), step=0.5
+        )
+        u_sl = l_c2.number_input(
+            "SL BALANCE", value=float(rec["sl_balance"]), step=0.5
+        )
+        u_pl = l_c3.number_input(
+            "PL BALANCE", value=float(rec["pl_balance"]), step=0.5
+        )
+
+        btn_save = st.form_submit_button("💾 SAVE CHANGES", type="primary")
+
+        if btn_save:
+          conn = get_connection()
+          cursor = conn.cursor()
+
+          try:
+            j_obj = datetime.strptime(u_doj, "%Y-%m-%d").date()
+            n_c_end = (j_obj + relativedelta(months=6)).strftime("%Y-%m-%d")
+          except:
+            n_c_end = rec["cycle_end"]
+
+          cursor.execute(
+              """
+                        UPDATE employees 
+                        SET name = ?, department = ?, designation = ?, dob = ?, joining_date = ?, doe = ?, 
+                            aadhar = ?, pan = ?, uan = ?, ctc = ?, salary = ?, 
+                            cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
+                        WHERE emp_id = ?
+                    """,
+              (
+                  u_name,
+                  u_dept,
+                  u_desg,
+                  u_dob,
+                  u_doj,
+                  u_doe,
+                  u_aadhar,
+                  u_pan,
+                  u_uan,
+                  u_ctc,
+                  u_salary,
+                  u_cl,
+                  u_sl,
+                  u_pl,
+                  u_doj,
+                  n_c_end,
+                  ed_id,
+              ),
           )
-          u_job = st.text_input("Job Title", value=e_job)
-          u_jdate = st.date_input("Joining Date", value=j_obj)
 
-          st.markdown("##### Adjust Leave Balances")
-          col_l1, col_l2, col_l3 = st.columns(3)
-          u_cl = col_l1.number_input("CL", value=float(cl), step=0.5)
-          u_sl = col_l2.number_input("SL", value=float(sl), step=0.5)
-          u_pl = col_l3.number_input("PL", value=float(pl), step=0.5)
+          conn.commit()
+          conn.close()
+          st.success("DETAILS UPDATED SUCCESSFULLY!")
+          del st.session_state["edit_id"]
+          st.rerun()
 
-          btn_save = st.form_submit_button("Save Changes", type="primary")
-
-          if btn_save:
-            conn = get_connection()
-            cursor = conn.cursor()
-            j_str = u_jdate.strftime("%Y-%m-%d")
-            n_c_end = (u_jdate + relativedelta(months=6)).strftime("%Y-%m-%d")
-
-            cursor.execute(
-                """
-                            UPDATE employees 
-                            SET name = ?, department = ?, job_title = ?, joining_date = ?, cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
-                            WHERE emp_id = ?
-                        """,
-                (
-                    u_name,
-                    u_dept,
-                    u_job,
-                    j_str,
-                    u_cl,
-                    u_sl,
-                    u_pl,
-                    j_str,
-                    n_c_end,
-                    ed_id,
-                ),
-            )
-
-            conn.commit()
-            conn.close()
-            st.success("Updated Successfully!")
-            del st.session_state["selected_emp_edit"]
-            st.rerun()
-
-      show_edit_modal()
+      if st.button("CANCEL"):
+        del st.session_state["edit_id"]
+        st.rerun()
 
 # ==============================================================================
 # 2. ADD NEW EMPLOYEE
 # ==============================================================================
-elif choice == "➕ Add Employee":
-  st.markdown("<p class='page-title'>Add New Employee</p>", unsafe_allow_html=True)
+elif choice == "➕ ADD EMPLOYEE":
+  st.markdown(
+      "<p class='page-title'>ADD NEW EMPLOYEE</p>", unsafe_allow_html=True
+  )
   st.divider()
 
-  with st.form("add_emp_design_form"):
-    c1, c2 = st.columns(2)
-    emp_id = c1.text_input("Employee ID (e.g., 4821)")
-    name = c2.text_input("Full Name (e.g., Aditya Ravi)")
+  with st.form("add_emp_full_form"):
+    st.markdown("#### 👤 PERSONAL DETAILS")
+    c1, c2, c3 = st.columns(3)
+    emp_id = c1.text_input("EMPLOYEE ID * (E.G. 4821)").upper()
+    name = c2.text_input("FULL NAME *").upper()
+    dob = c3.date_input("DATE OF BIRTH (DOB)")
 
-    c3, c4 = st.columns(2)
-    dept = c3.selectbox(
-        "Department",
-        ["Engineering", "Product Design", "Marketing", "Operations", "Finance"],
+    st.markdown("#### 🏢 JOB & POSITION DETAILS")
+    c4, c5, c6 = st.columns(3)
+    dept = c4.selectbox(
+        "DEPARTMENT",
+        ["ENGINEERING", "PRODUCT DESIGN", "MARKETING", "OPERATIONS", "FINANCE"],
     )
-    job_title = c4.text_input("Job Title", value="Software Engineer")
+    designation = c5.text_input(
+        "DESIGNATION", value="SOFTWARE ENGINEER"
+    ).upper()
+    joining_date = c6.date_input("DATE OF JOINING (DOJ)")
 
-    joining_date = st.date_input("Date of Joining", value=datetime.now())
+    st.markdown("#### 📑 STATUTORY & IDENTITY DETAILS")
+    c7, c8, c9 = st.columns(3)
+    aadhar = c7.text_input("AADHAR CARD NUMBER").upper()
+    pan = c8.text_input("PAN CARD NUMBER").upper()
+    uan = c9.text_input("UAN NUMBER").upper()
 
-    submit = st.form_submit_button("Register Employee", type="primary")
+    st.markdown("#### 💰 COMPENSATION DETAILS")
+    c10, c11 = st.columns(2)
+    ctc = c10.number_input("ANNUAL CTC (₹)", min_value=0.0, step=10000.0)
+    salary = c11.number_input(
+        "MONTHLY IN-HAND SALARY (₹)", min_value=0.0, step=1000.0
+    )
+
+    submit = st.form_submit_button("REGISTER EMPLOYEE", type="primary")
 
     if submit:
       if not emp_id or not name:
-        st.error("Employee ID aur Name dono required hain!")
+        st.error("EMPLOYEE ID AND NAME ARE MANDATORY!")
       else:
         conn = get_connection()
         cursor = conn.cursor()
@@ -509,28 +544,43 @@ elif choice == "➕ Add Employee":
             "SELECT emp_id FROM employees WHERE emp_id = ?", (emp_id,)
         )
         if cursor.fetchone():
-          st.error(f"Emp ID {emp_id} pehle se registered hai!")
+          st.error(f"EMP ID {emp_id} IS ALREADY REGISTERED!")
         else:
           j_str = joining_date.strftime("%Y-%m-%d")
+          dob_str = dob.strftime("%Y-%m-%d")
           c_end = (joining_date + relativedelta(months=6)).strftime("%Y-%m-%d")
 
           cursor.execute(
               """
-                INSERT INTO employees (emp_id, name, department, job_title, joining_date, cl_balance, sl_balance, pl_balance, cycle_start, cycle_end)
-                VALUES (?, ?, ?, ?, ?, 3.0, 3.0, 1.0, ?, ?)
+                INSERT INTO employees (emp_id, name, dob, joining_date, doe, aadhar, pan, uan, department, designation, ctc, salary, cl_balance, sl_balance, pl_balance, cycle_start, cycle_end)
+                VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 3.0, 3.0, 1.0, ?, ?)
               """,
-              (emp_id, name, dept, job_title, j_str, j_str, c_end),
+              (
+                  emp_id,
+                  name,
+                  dob_str,
+                  j_str,
+                  aadhar,
+                  pan,
+                  uan,
+                  dept,
+                  designation,
+                  ctc,
+                  salary,
+                  j_str,
+                  c_end,
+              ),
           )
           conn.commit()
-          st.success(f"Employee '{name}' ({emp_id}) successfully registered!")
+          st.success(f"EMPLOYEE '{name}' ({emp_id}) REGISTERED SUCCESSFULLY!")
         conn.close()
 
 # ==============================================================================
 # 3. LEAVE REQUESTS
 # ==============================================================================
-elif choice == "📊 Leave Requests":
+elif choice == "📊 LEAVE REQUESTS":
   st.markdown(
-      "<p class='page-title'>Leave Applications</p>", unsafe_allow_html=True
+      "<p class='page-title'>LEAVE APPLICATIONS</p>", unsafe_allow_html=True
   )
   st.divider()
 
@@ -539,60 +589,83 @@ elif choice == "📊 Leave Requests":
   conn.close()
 
   if df_emp.empty:
-    st.info("Pehle employee add karein.")
+    st.info("PLEASE ADD AN EMPLOYEE FIRST.")
   else:
-    emp_dict = {f"{r['emp_id']} - {r['name']}": r['emp_id'] for _, r in df_emp.iterrows()}
-    sel_emp_str = st.selectbox("Select Employee", list(emp_dict.keys()))
+    emp_dict = {
+        f"{str(r['emp_id']).upper()} - {str(r['name']).upper()}": str(
+            r["emp_id"]
+        ).upper()
+        for _, r in df_emp.iterrows()
+    }
+    sel_emp_str = st.selectbox("SELECT EMPLOYEE", list(emp_dict.keys()))
     sel_emp_id = emp_dict[sel_emp_str]
 
     sync_leave_cycles(sel_emp_id)
 
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM employees WHERE emp_id = ?", (sel_emp_id,))
-    emp_rec = cursor.fetchone()
+    df_target_emp = pd.read_sql_query(
+        f"SELECT * FROM employees WHERE emp_id = '{sel_emp_id}'", conn
+    )
     conn.close()
 
-    _, e_name, _, _, e_jdate, cl, sl, pl, _, _ = emp_rec
-    j_obj = datetime.strptime(e_jdate, "%Y-%m-%d").date()
-    act_date = j_obj + relativedelta(months=3)
+    if not df_target_emp.empty:
+      emp_rec = df_target_emp.iloc[0]
+      j_obj = datetime.strptime(emp_rec["joining_date"], "%Y-%m-%d").date()
+      act_date = j_obj + relativedelta(months=3)
 
-    st.info(f"Probation End Date (3 Months Rule): {act_date}")
+      st.info(f"PROBATION END DATE (3 MONTHS RULE): **{act_date}**")
 
-    with st.form("apply_leave_form_design"):
-      col1, col2, col3 = st.columns(3)
-      l_type = col1.selectbox("Leave Type", ["CL", "SL", "PL"])
-      l_days = col2.number_input("Days", min_value=0.5, max_value=15.0, step=0.5)
-      l_date = col3.date_input("Leave Date", value=datetime.now())
+      with st.form("apply_leave_form"):
+        col1, col2, col3 = st.columns(3)
+        l_type = col1.selectbox("LEAVE TYPE", ["CL", "SL", "PL"])
+        l_days = col2.number_input(
+            "DAYS", min_value=0.5, max_value=15.0, step=0.5
+        )
+        l_date = col3.date_input("LEAVE DATE", value=datetime.now())
 
-      btn_apply = st.form_submit_button("Deduct Leave", type="primary")
+        btn_apply = st.form_submit_button("DEDUCT LEAVE", type="primary")
 
-      if btn_apply:
-        if l_date < act_date:
-          st.error(f"❌ Rejected! Probation active till {act_date}")
-        else:
-          col_map = {"CL": "cl_balance", "SL": "sl_balance", "PL": "pl_balance"}
-          conn = get_connection()
-          cursor = conn.cursor()
-          cursor.execute(f"SELECT {col_map[l_type]} FROM employees WHERE emp_id = ?", (sel_emp_id,))
-          curr_b = cursor.fetchone()[0]
-
-          if curr_b >= l_days:
-            cursor.execute(f"UPDATE employees SET {col_map[l_type]} = ? WHERE emp_id = ?", (curr_b - l_days, sel_emp_id))
-            conn.commit()
-            conn.close()
-            st.success(f"✅ Leave Deducted! Remaining {l_type}: {curr_b - l_days}")
-            st.rerun()
+        if btn_apply:
+          if l_date < act_date:
+            st.error(f"❌ REJECTED! PROBATION ACTIVE TILL {act_date}")
           else:
-            st.error(f"❌ Insufficient Balance! Available {l_type}: {curr_b}")
-            conn.close()
+            col_map = {
+                "CL": "cl_balance",
+                "SL": "sl_balance",
+                "PL": "pl_balance",
+            }
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT {col_map[l_type]} FROM employees WHERE emp_id = ?",
+                (sel_emp_id,),
+            )
+            curr_b = cursor.fetchone()[0]
+
+            if curr_b >= l_days:
+              cursor.execute(
+                  f"UPDATE employees SET {col_map[l_type]} = ? WHERE emp_id ="
+                  " ?",
+                  (curr_b - l_days, sel_emp_id),
+              )
+              conn.commit()
+              conn.close()
+              st.success(
+                  f"✅ LEAVE DEDUCTED! REMAINING {l_type}: {curr_b - l_days}"
+              )
+              st.rerun()
+            else:
+              st.error(
+                  f"❌ INSUFFICIENT BALANCE! AVAILABLE {l_type}: {curr_b}"
+              )
+              conn.close()
 
 # ==============================================================================
 # 4. INVENTORY & ASSETS
 # ==============================================================================
-elif choice == "💼 Inventory & Assets":
+elif choice == "💼 INVENTORY & ASSETS":
   st.markdown(
-      "<p class='page-title'>Inventory & Document Portal</p>",
+      "<p class='page-title'>INVENTORY & DOCUMENT PORTAL</p>",
       unsafe_allow_html=True,
   )
   st.divider()
@@ -602,32 +675,48 @@ elif choice == "💼 Inventory & Assets":
   conn.close()
 
   if not df_emp.empty:
-    emp_dict = {f"{r['emp_id']} - {r['name']}": r['emp_id'] for _, r in df_emp.iterrows()}
-    sel_emp_str = st.selectbox("Select Employee for Assets/Docs", list(emp_dict.keys()))
+    emp_dict = {
+        f"{str(r['emp_id']).upper()} - {str(r['name']).upper()}": str(
+            r["emp_id"]
+        ).upper()
+        for _, r in df_emp.iterrows()
+    }
+    sel_emp_str = st.selectbox(
+        "SELECT EMPLOYEE FOR ASSETS/DOCS", list(emp_dict.keys())
+    )
     sel_emp_id = emp_dict[sel_emp_str]
 
     col_inv, col_doc = st.columns(2)
 
     with col_inv:
-      st.markdown("#### 💻 Assign Inventory Item")
+      st.markdown("#### 💻 ASSIGN INVENTORY ITEM")
       with st.form("inv_form"):
-        item_name = st.text_input("Item Name (e.g. Laptop)")
-        serial_no = st.text_input("Serial Number")
-        if st.form_submit_button("Assign Asset", type="primary"):
+        item_name = st.text_input("ITEM NAME (E.G. LAPTOP)").upper()
+        serial_no = st.text_input("SERIAL NUMBER").upper()
+        if st.form_submit_button("ASSIGN ASSET", type="primary"):
           conn = get_connection()
           cursor = conn.cursor()
-          cursor.execute("INSERT INTO inventory (emp_id, item_name, serial_number, assigned_date, status) VALUES (?, ?, ?, ?, 'Assigned')", (sel_emp_id, item_name, serial_no, datetime.now().strftime("%Y-%m-%d")))
+          cursor.execute(
+              "INSERT INTO inventory (emp_id, item_name, serial_number,"
+              " assigned_date, status) VALUES (?, ?, ?, ?, 'ASSIGNED')",
+              (
+                  sel_emp_id,
+                  item_name,
+                  serial_no,
+                  datetime.now().strftime("%Y-%m-%d"),
+              ),
+          )
           conn.commit()
           conn.close()
-          st.success("Asset Assigned!")
+          st.success("ASSET ASSIGNED!")
           st.rerun()
 
     with col_doc:
-      st.markdown("#### 📄 Upload Document")
+      st.markdown("#### 📄 UPLOAD DOCUMENT")
       with st.form("doc_form"):
-        doc_name = st.text_input("Document Title")
-        doc_file = st.file_uploader("Upload Document")
-        if st.form_submit_button("Upload Doc", type="primary"):
+        doc_name = st.text_input("DOCUMENT TITLE").upper()
+        doc_file = st.file_uploader("UPLOAD DOCUMENT")
+        if st.form_submit_button("UPLOAD DOC", type="primary"):
           if doc_name and doc_file:
             os.makedirs("uploads", exist_ok=True)
             f_path = os.path.join("uploads", f"{sel_emp_id}_{doc_file.name}")
@@ -635,8 +724,17 @@ elif choice == "💼 Inventory & Assets":
               f.write(doc_file.getbuffer())
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO documents (emp_id, doc_name, file_path, upload_date) VALUES (?, ?, ?, ?)", (sel_emp_id, doc_name, f_path, datetime.now().strftime("%Y-%m-%d")))
+            cursor.execute(
+                "INSERT INTO documents (emp_id, doc_name, file_path,"
+                " upload_date) VALUES (?, ?, ?, ?)",
+                (
+                    sel_emp_id,
+                    doc_name,
+                    f_path,
+                    datetime.now().strftime("%Y-%m-%d"),
+                ),
+            )
             conn.commit()
             conn.close()
-            st.success("Document Saved!")
+            st.success("DOCUMENT SAVED!")
             st.rerun()
