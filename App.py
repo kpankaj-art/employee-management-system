@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 import os
 import sqlite3
 from dateutil.relativedelta import relativedelta
@@ -13,6 +13,8 @@ import streamlit as st
 def init_db():
   conn = sqlite3.connect("employee_management.db")
   cursor = conn.cursor()
+
+  cursor.execute("PRAGMA foreign_keys = ON")
 
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS employees (
@@ -83,14 +85,55 @@ def init_db():
 
 
 def get_connection():
-  return sqlite3.connect("employee_management.db")
+  conn = sqlite3.connect("employee_management.db")
+  conn.execute("PRAGMA foreign_keys = ON")
+  return conn
+
+
+def format_days(val):
+  """Helper function to show 3 DAYS instead of 3.0 DAYS"""
+  try:
+    f_val = float(val)
+    if f_val.is_integer():
+      return f"{int(f_val)} DAYS"
+    return f"{f_val} DAYS"
+  except:
+    return "0 DAYS"
+
+
+def format_date_display(date_str):
+  """Converts YYYY-MM-DD to DD/MM/YYYY for UI display"""
+  if not date_str or date_str in ["N/A", "ACTIVE", "None", ""]:
+    return date_str
+  try:
+    return datetime.strptime(str(date_str), "%Y-%m-%d").strftime("%d/%m/%Y")
+  except:
+    return str(date_str)
+
+
+def parse_date_input(d_input):
+  """Safely converts string or date object to YYYY-MM-DD string"""
+  if isinstance(d_input, (date, datetime)):
+    return d_input.strftime("%Y-%m-%d")
+  if not d_input:
+    return ""
+  d_str = str(d_input).strip()
+  for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+    try:
+      return datetime.strptime(d_str, fmt).strftime("%Y-%m-%d")
+    except ValueError:
+      pass
+  return d_str
 
 
 def sync_leave_cycles(emp_id, target_date_str=None):
   if not target_date_str:
     target_date = datetime.now().date()
   else:
-    target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    try:
+      target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    except:
+      target_date = datetime.now().date()
 
   conn = get_connection()
   cursor = conn.cursor()
@@ -104,32 +147,57 @@ def sync_leave_cycles(emp_id, target_date_str=None):
   if row:
     cl, sl, pl, cycle_start_str, cycle_end_str = row
     if cycle_end_str:
-      cycle_end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
+      try:
+        cycle_end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
+        while target_date >= cycle_end:
+          cl += 3.0
+          sl += 3.0
+          pl += 1.0
+          new_cycle_start = cycle_end
+          cycle_end = new_cycle_start + relativedelta(months=6)
 
-      while target_date >= cycle_end:
-        cl += 3.0
-        sl += 3.0
-        pl += 1.0
-        new_cycle_start = cycle_end
-        cycle_end = new_cycle_start + relativedelta(months=6)
+          cursor.execute(
+              """
+                        UPDATE employees 
+                        SET cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
+                        WHERE emp_id = ?
+                    """,
+              (
+                  cl,
+                  sl,
+                  pl,
+                  new_cycle_start.strftime("%Y-%m-%d"),
+                  cycle_end.strftime("%Y-%m-%d"),
+                  emp_id,
+              ),
+          )
+          conn.commit()
+      except Exception:
+        pass
 
-        cursor.execute(
-            """
-                    UPDATE employees 
-                    SET cl_balance = ?, sl_balance = ?, pl_balance = ?, cycle_start = ?, cycle_end = ?
-                    WHERE emp_id = ?
-                """,
-            (
-                cl,
-                sl,
-                pl,
-                new_cycle_start.strftime("%Y-%m-%d"),
-                cycle_end.strftime("%Y-%m-%d"),
-                emp_id,
-            ),
-        )
-        conn.commit()
+  conn.close()
 
+
+def delete_employee(emp_id):
+  conn = get_connection()
+  cursor = conn.cursor()
+
+  cursor.execute(
+      "SELECT file_path FROM documents WHERE emp_id = ?", (emp_id,)
+  )
+  docs = cursor.fetchall()
+  for doc in docs:
+    if doc[0] and os.path.exists(doc[0]):
+      try:
+        os.remove(doc[0])
+      except:
+        pass
+
+  cursor.execute("DELETE FROM inventory WHERE emp_id = ?", (emp_id,))
+  cursor.execute("DELETE FROM documents WHERE emp_id = ?", (emp_id,))
+  cursor.execute("DELETE FROM employees WHERE emp_id = ?", (emp_id,))
+
+  conn.commit()
   conn.close()
 
 
@@ -258,7 +326,9 @@ if choice == "👥 EMPLOYEES":
     )
 
     dept_list = ["ALL DEPARTMENTS"] + [
-        str(x).upper() for x in df_all_emp["department"].dropna().unique()
+        str(x).upper()
+        for x in df_all_emp["department"].dropna().unique()
+        if str(x).strip() != ""
     ]
     dept_filter = f_col2.selectbox(
         "DEPARTMENT", dept_list, label_visibility="collapsed"
@@ -267,7 +337,9 @@ if choice == "👥 EMPLOYEES":
     filtered_df = df_all_emp.copy()
     if search_query:
       filtered_df = filtered_df[
-          filtered_df["name"].str.contains(search_query, case=False, na=False)
+          filtered_df["name"]
+          .astype(str)
+          .str.contains(search_query, case=False, na=False)
           | filtered_df["emp_id"]
           .astype(str)
           .str.contains(search_query, case=False, na=False)
@@ -280,7 +352,7 @@ if choice == "👥 EMPLOYEES":
       ]
     if dept_filter != "ALL DEPARTMENTS":
       filtered_df = filtered_df[
-          filtered_df["department"].str.upper() == dept_filter
+          filtered_df["department"].astype(str).str.upper() == dept_filter
       ]
 
     st.write(" ")
@@ -288,16 +360,24 @@ if choice == "👥 EMPLOYEES":
 
     for _, row in filtered_df.iterrows():
       emp_id = str(row["emp_id"]).upper()
-      name = str(row["name"]).upper()
-      dept = str(row.get("department", "ENGINEERING")).upper()
-      designation = str(row.get("designation", "SOFTWARE ENGINEER")).upper()
-      j_date = str(row["joining_date"]).upper()
+      name = str(row.get("name", "")).upper()
+      dept = str(
+          row.get("department")
+          if pd.notna(row.get("department"))
+          else "ENGINEERING"
+      ).upper()
+      designation = str(
+          row.get("designation")
+          if pd.notna(row.get("designation"))
+          else "SOFTWARE ENGINEER"
+      ).upper()
+      j_date = format_date_display(row.get("joining_date", ""))
 
       sync_leave_cycles(emp_id)
 
       with st.container():
-        c_id, c_name, c_dept, c_desg, c_date, c_act1, c_act2 = st.columns(
-            [1.5, 3, 2.5, 3, 2, 1, 1]
+        c_id, c_name, c_dept, c_desg, c_date, c_act1, c_act2, c_act3 = (
+            st.columns([1.2, 2.8, 2.2, 2.8, 1.8, 0.8, 0.8, 0.8])
         )
 
         c_id.markdown(f"**`{emp_id}`**")
@@ -312,7 +392,38 @@ if choice == "👥 EMPLOYEES":
         if c_act2.button("✏️", key=f"e_{emp_id}", help="EDIT DETAILS"):
           st.session_state["edit_id"] = emp_id
 
+        if c_act3.button("🗑️", key=f"d_{emp_id}", help="DELETE EMPLOYEE"):
+          st.session_state["confirm_del_id"] = emp_id
+
         st.divider()
+
+  # DELETE CONFIRMATION MODAL POPUP
+  if "confirm_del_id" in st.session_state:
+    del_emp_id = st.session_state["confirm_del_id"]
+    st.warning(
+        f"⚠️ ARE YOU SURE YOU WANT TO PERMANENTLY DELETE EMPLOYEE ID:"
+        f" **{del_emp_id}**?"
+    )
+    col_d1, col_d2 = st.columns([1, 4])
+    if col_d1.button("YES, DELETE PERMANENTLY", type="primary"):
+      delete_employee(del_emp_id)
+      st.success(f"EMPLOYEE {del_emp_id} DELETED SUCCESSFULLY!")
+      del st.session_state["confirm_del_id"]
+      if (
+          "view_id" in st.session_state
+          and st.session_state["view_id"] == del_emp_id
+      ):
+        del st.session_state["view_id"]
+      if (
+          "edit_id" in st.session_state
+          and st.session_state["edit_id"] == del_emp_id
+      ):
+        del st.session_state["edit_id"]
+      st.rerun()
+
+    if col_d2.button("CANCEL DELETE"):
+      del st.session_state["confirm_del_id"]
+      st.rerun()
 
   # VIEW MODAL POPUP
   if "view_id" in st.session_state:
@@ -331,37 +442,69 @@ if choice == "👥 EMPLOYEES":
 
     if not df_emp_v.empty:
       emp_rec = df_emp_v.iloc[0]
-      j_obj = datetime.strptime(emp_rec["joining_date"], "%Y-%m-%d").date()
-      act_date = j_obj + relativedelta(months=3)
-      is_act = datetime.now().date() >= act_date
+
+      try:
+        j_obj = datetime.strptime(
+            str(emp_rec["joining_date"]), "%Y-%m-%d"
+        ).date()
+        act_date = j_obj + relativedelta(months=3)
+        is_act = datetime.now().date() >= act_date
+      except:
+        act_date = "N/A"
+        is_act = True
 
       st.markdown(
-          f"### 👤 PROFILE: {str(emp_rec['name']).upper()} ({str(emp_rec['emp_id']).upper()})"
+          f"### 👤 PROFILE: {str(emp_rec.get('name', '')).upper()} ({str(emp_rec.get('emp_id', '')).upper()})"
       )
 
       col1, col2, col3 = st.columns(3)
       col1.write(
-          f"**DEPARTMENT:** {str(emp_rec.get('department', 'N/A')).upper()}"
+          f"**DEPARTMENT:**"
+          f" {str(emp_rec.get('department') if pd.notna(emp_rec.get('department')) else 'N/A').upper()}"
       )
       col1.write(
-          f"**DESIGNATION:** {str(emp_rec.get('designation', 'N/A')).upper()}"
+          f"**DESIGNATION:**"
+          f" {str(emp_rec.get('designation') if pd.notna(emp_rec.get('designation')) else 'N/A').upper()}"
       )
-      col1.write(f"**DOB:** {str(emp_rec.get('dob', 'N/A')).upper()}")
+      col1.write(
+          f"**DOB:**"
+          f" {format_date_display(emp_rec.get('dob') if pd.notna(emp_rec.get('dob')) else 'N/A')}"
+      )
 
-      col2.write(f"**DOJ:** {str(emp_rec.get('joining_date', 'N/A')).upper()}")
-      col2.write(f"**DOE:** {str(emp_rec.get('doe', 'ACTIVE')).upper()}")
-      col2.write(f"**CTC:** ₹{emp_rec.get('ctc', 0.0):,.2f}")
+      col2.write(
+          f"**DOJ:**"
+          f" {format_date_display(emp_rec.get('joining_date') if pd.notna(emp_rec.get('joining_date')) else 'N/A')}"
+      )
+      col2.write(
+          f"**DOE:**"
+          f" {format_date_display(emp_rec.get('doe')) if pd.notna(emp_rec.get('doe')) and str(emp_rec.get('doe')).strip() != '' else 'ACTIVE'}"
+      )
 
-      col3.write(f"**AADHAR:** {str(emp_rec.get('aadhar', 'N/A')).upper()}")
-      col3.write(f"**PAN:** {str(emp_rec.get('pan', 'N/A')).upper()}")
-      col3.write(f"**UAN:** {str(emp_rec.get('uan', 'N/A')).upper()}")
+      try:
+        ctc_val = float(emp_rec.get("ctc", 0.0))
+      except:
+        ctc_val = 0.0
+      col2.write(f"**CTC:** ₹{ctc_val:,.2f}")
+
+      col3.write(
+          f"**AADHAR:**"
+          f" {str(emp_rec.get('aadhar') if pd.notna(emp_rec.get('aadhar')) else 'N/A').upper()}"
+      )
+      col3.write(
+          f"**PAN:**"
+          f" {str(emp_rec.get('pan') if pd.notna(emp_rec.get('pan')) else 'N/A').upper()}"
+      )
+      col3.write(
+          f"**UAN:**"
+          f" {str(emp_rec.get('uan') if pd.notna(emp_rec.get('uan')) else 'N/A').upper()}"
+      )
 
       st.write("---")
       m1, m2, m3, m4 = st.columns(4)
       m1.metric("STATUS", "ACTIVE ✅" if is_act else "PROBATION ⏳")
-      m2.metric("CL BALANCE", f"{emp_rec['cl_balance']} DAYS")
-      m3.metric("SL BALANCE", f"{emp_rec['sl_balance']} DAYS")
-      m4.metric("PL BALANCE", f"{emp_rec['pl_balance']} DAYS")
+      m2.metric("CL BALANCE", format_days(emp_rec.get("cl_balance", 0)))
+      m3.metric("SL BALANCE", format_days(emp_rec.get("sl_balance", 0)))
+      m4.metric("PL BALANCE", format_days(emp_rec.get("pl_balance", 0)))
 
       t1, t2 = st.tabs(["💻 ASSIGNED INVENTORY", "📄 DOCUMENTS VAULT"])
       with t1:
@@ -386,72 +529,123 @@ if choice == "👥 EMPLOYEES":
       rec = df_emp_e.iloc[0]
 
       st.markdown(
-          f"### ✏️ EDIT COMPLETE DETAILS: {str(rec['name']).upper()}"
+          f"### ✏️ EDIT COMPLETE DETAILS: {str(rec.get('name', '')).upper()}"
       )
 
       with st.form("edit_emp_form_full"):
         e_c1, e_c2, e_c3 = st.columns(3)
 
         u_name = e_c1.text_input(
-            "FULL NAME", value=str(rec["name"]).upper()
+            "FULL NAME", value=str(rec.get("name", "")).upper()
         ).upper()
         u_dept = e_c2.text_input(
             "DEPARTMENT",
-            value=str(rec.get("department", "ENGINEERING")).upper(),
+            value=str(
+                rec.get("department")
+                if pd.notna(rec.get("department"))
+                else "ENGINEERING"
+            ).upper(),
         ).upper()
         u_desg = e_c3.text_input(
             "DESIGNATION",
-            value=str(rec.get("designation", "SOFTWARE ENGINEER")).upper(),
+            value=str(
+                rec.get("designation")
+                if pd.notna(rec.get("designation"))
+                else "SOFTWARE ENGINEER"
+            ).upper(),
         ).upper()
 
-        u_dob = e_c1.text_input(
-            "DOB (YYYY-MM-DD)", value=str(rec.get("dob", ""))
+        # Parse Existing Dates for Picker
+        try:
+          curr_dob = datetime.strptime(
+              str(rec.get("dob")), "%Y-%m-%d"
+          ).date()
+        except:
+          curr_dob = date(1995, 1, 1)
+
+        try:
+          curr_doj = datetime.strptime(
+              str(rec.get("joining_date")), "%Y-%m-%d"
+          ).date()
+        except:
+          curr_doj = datetime.now().date()
+
+        u_dob_val = e_c1.date_input(
+            "DOB (DD/MM/YYYY)",
+            value=curr_dob,
+            min_value=date(1980, 1, 1),
+            max_value=datetime.now().date(),
+            format="DD/MM/YYYY",
         )
-        u_doj = e_c2.text_input("DOJ (YYYY-MM-DD)", value=str(rec["joining_date"]))
-        u_doe = e_c3.text_input(
-            "DOE (YYYY-MM-DD / EMPTY)", value=str(rec.get("doe", ""))
+        u_doj_val = e_c2.date_input(
+            "DOJ (DD/MM/YYYY)",
+            value=curr_doj,
+            min_value=date(2000, 1, 1),
+            format="DD/MM/YYYY",
+        )
+        u_doe_str = e_c3.text_input(
+            "DOE (YYYY-MM-DD / EMPTY)",
+            value=str(rec.get("doe") if pd.notna(rec.get("doe")) else ""),
         )
 
         u_aadhar = e_c1.text_input(
-            "AADHAR CARD", value=str(rec.get("aadhar", "")).upper()
+            "AADHAR CARD",
+            value=str(
+                rec.get("aadhar") if pd.notna(rec.get("aadhar")) else ""
+            ).upper(),
         ).upper()
         u_pan = e_c2.text_input(
-            "PAN CARD", value=str(rec.get("pan", "")).upper()
+            "PAN CARD",
+            value=str(
+                rec.get("pan") if pd.notna(rec.get("pan")) else ""
+            ).upper(),
         ).upper()
         u_uan = e_c3.text_input(
-            "UAN NUMBER", value=str(rec.get("uan", "")).upper()
+            "UAN NUMBER",
+            value=str(
+                rec.get("uan") if pd.notna(rec.get("uan")) else ""
+            ).upper(),
         ).upper()
 
-        u_ctc = e_c1.number_input(
-            "CTC (ANNUAL)", value=float(rec.get("ctc", 0.0))
-        )
-        u_salary = e_c2.number_input(
-            "IN-HAND SALARY (MONTHLY)", value=float(rec.get("salary", 0.0))
-        )
+        try:
+          c_val = float(rec.get("ctc", 0.0))
+        except:
+          c_val = 0.0
+        try:
+          s_val = float(rec.get("salary", 0.0))
+        except:
+          s_val = 0.0
+
+        u_ctc = e_c1.number_input("CTC (ANNUAL)", value=c_val)
+        u_salary = e_c2.number_input("IN-HAND SALARY (MONTHLY)", value=s_val)
 
         st.markdown("##### 🌴 EDIT LEAVE BALANCES")
         l_c1, l_c2, l_c3 = st.columns(3)
         u_cl = l_c1.number_input(
-            "CL BALANCE", value=float(rec["cl_balance"]), step=0.5
+            "CL BALANCE", value=float(rec.get("cl_balance", 3.0)), step=0.5
         )
         u_sl = l_c2.number_input(
-            "SL BALANCE", value=float(rec["sl_balance"]), step=0.5
+            "SL BALANCE", value=float(rec.get("sl_balance", 3.0)), step=0.5
         )
         u_pl = l_c3.number_input(
-            "PL BALANCE", value=float(rec["pl_balance"]), step=0.5
+            "PL BALANCE", value=float(rec.get("pl_balance", 1.0)), step=0.5
         )
 
         btn_save = st.form_submit_button("💾 SAVE CHANGES", type="primary")
 
         if btn_save:
+          u_dob_parsed = parse_date_input(u_dob_val)
+          u_doj_parsed = parse_date_input(u_doj_val)
+          u_doe_parsed = parse_date_input(u_doe_str)
+
           conn = get_connection()
           cursor = conn.cursor()
 
           try:
-            j_obj = datetime.strptime(u_doj, "%Y-%m-%d").date()
+            j_obj = datetime.strptime(u_doj_parsed, "%Y-%m-%d").date()
             n_c_end = (j_obj + relativedelta(months=6)).strftime("%Y-%m-%d")
           except:
-            n_c_end = rec["cycle_end"]
+            n_c_end = str(rec.get("cycle_end", ""))
 
           cursor.execute(
               """
@@ -465,9 +659,9 @@ if choice == "👥 EMPLOYEES":
                   u_name,
                   u_dept,
                   u_desg,
-                  u_dob,
-                  u_doj,
-                  u_doe,
+                  u_dob_parsed,
+                  u_doj_parsed,
+                  u_doe_parsed,
                   u_aadhar,
                   u_pan,
                   u_uan,
@@ -476,7 +670,7 @@ if choice == "👥 EMPLOYEES":
                   u_cl,
                   u_sl,
                   u_pl,
-                  u_doj,
+                  u_doj_parsed,
                   n_c_end,
                   ed_id,
               ),
@@ -504,9 +698,17 @@ elif choice == "➕ ADD EMPLOYEE":
   with st.form("add_emp_full_form"):
     st.markdown("#### 👤 PERSONAL DETAILS")
     c1, c2, c3 = st.columns(3)
-    emp_id = c1.text_input("EMPLOYEE ID * (E.G. 4821)").upper()
-    name = c2.text_input("FULL NAME *").upper()
-    dob = c3.date_input("DATE OF BIRTH (DOB)")
+    emp_id = c1.text_input("EMPLOYEE ID * (E.G. 4821)").upper().strip()
+    name = c2.text_input("FULL NAME *").upper().strip()
+
+    # DOB enabled from 1980 with DD/MM/YYYY Format
+    dob = c3.date_input(
+        "DATE OF BIRTH (DOB)",
+        value=date(1995, 1, 1),
+        min_value=date(1980, 1, 1),
+        max_value=datetime.now().date(),
+        format="DD/MM/YYYY",
+    )
 
     st.markdown("#### 🏢 JOB & POSITION DETAILS")
     c4, c5, c6 = st.columns(3)
@@ -517,13 +719,20 @@ elif choice == "➕ ADD EMPLOYEE":
     designation = c5.text_input(
         "DESIGNATION", value="SOFTWARE ENGINEER"
     ).upper()
-    joining_date = c6.date_input("DATE OF JOINING (DOJ)")
+
+    # DOJ with DD/MM/YYYY Format
+    joining_date = c6.date_input(
+        "DATE OF JOINING (DOJ)",
+        value=datetime.now().date(),
+        min_value=date(2000, 1, 1),
+        format="DD/MM/YYYY",
+    )
 
     st.markdown("#### 📑 STATUTORY & IDENTITY DETAILS")
     c7, c8, c9 = st.columns(3)
-    aadhar = c7.text_input("AADHAR CARD NUMBER").upper()
-    pan = c8.text_input("PAN CARD NUMBER").upper()
-    uan = c9.text_input("UAN NUMBER").upper()
+    aadhar = c7.text_input("AADHAR CARD NUMBER").upper().strip()
+    pan = c8.text_input("PAN CARD NUMBER").upper().strip()
+    uan = c9.text_input("UAN NUMBER").upper().strip()
 
     st.markdown("#### 💰 COMPENSATION DETAILS")
     c10, c11 = st.columns(2)
@@ -536,43 +745,82 @@ elif choice == "➕ ADD EMPLOYEE":
 
     if submit:
       if not emp_id or not name:
-        st.error("EMPLOYEE ID AND NAME ARE MANDATORY!")
+        st.error("❌ EMPLOYEE ID AND NAME ARE MANDATORY!")
       else:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT emp_id FROM employees WHERE emp_id = ?", (emp_id,)
-        )
-        if cursor.fetchone():
-          st.error(f"EMP ID {emp_id} IS ALREADY REGISTERED!")
-        else:
-          j_str = joining_date.strftime("%Y-%m-%d")
-          dob_str = dob.strftime("%Y-%m-%d")
-          c_end = (joining_date + relativedelta(months=6)).strftime("%Y-%m-%d")
 
-          cursor.execute(
-              """
-                INSERT INTO employees (emp_id, name, dob, joining_date, doe, aadhar, pan, uan, department, designation, ctc, salary, cl_balance, sl_balance, pl_balance, cycle_start, cycle_end)
-                VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 3.0, 3.0, 1.0, ?, ?)
-              """,
-              (
-                  emp_id,
-                  name,
-                  dob_str,
-                  j_str,
-                  aadhar,
-                  pan,
-                  uan,
-                  dept,
-                  designation,
-                  ctc,
-                  salary,
-                  j_str,
-                  c_end,
-              ),
+        # 1. Check Duplicate EMP ID
+        cursor.execute("SELECT name FROM employees WHERE emp_id = ?", (emp_id,))
+        emp_exist = cursor.fetchone()
+
+        if emp_exist:
+          st.error(
+              f"❌ ERROR: EMPLOYEE ID '{emp_id}' IS ALREADY REGISTERED (NAME:"
+              f" {emp_exist[0]})!"
           )
-          conn.commit()
-          st.success(f"EMPLOYEE '{name}' ({emp_id}) REGISTERED SUCCESSFULLY!")
+        else:
+          duplicate_found = False
+
+          # 2. Check Duplicate PAN (if provided)
+          if pan:
+            cursor.execute(
+                "SELECT emp_id, name FROM employees WHERE pan = ?", (pan,)
+            )
+            pan_exist = cursor.fetchone()
+            if pan_exist:
+              st.error(
+                  f"❌ ERROR: PAN CARD '{pan}' IS ALREADY REGISTERED WITH EMP"
+                  f" ID: {pan_exist[0]} ({pan_exist[1]})!"
+              )
+              duplicate_found = True
+
+          # 3. Check Duplicate AADHAR (if provided)
+          if aadhar and not duplicate_found:
+            cursor.execute(
+                "SELECT emp_id, name FROM employees WHERE aadhar = ?", (aadhar,)
+            )
+            aadhar_exist = cursor.fetchone()
+            if aadhar_exist:
+              st.error(
+                  f"❌ ERROR: AADHAR CARD '{aadhar}' IS ALREADY REGISTERED WITH"
+                  f" EMP ID: {aadhar_exist[0]} ({aadhar_exist[1]})!"
+              )
+              duplicate_found = True
+
+          if not duplicate_found:
+            j_str = joining_date.strftime("%Y-%m-%d")
+            dob_str = dob.strftime("%Y-%m-%d")
+            c_end = (joining_date + relativedelta(months=6)).strftime(
+                "%Y-%m-%d"
+            )
+
+            cursor.execute(
+                """
+                  INSERT INTO employees (emp_id, name, dob, joining_date, doe, aadhar, pan, uan, department, designation, ctc, salary, cl_balance, sl_balance, pl_balance, cycle_start, cycle_end)
+                  VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 3.0, 3.0, 1.0, ?, ?)
+                """,
+                (
+                    emp_id,
+                    name,
+                    dob_str,
+                    j_str,
+                    aadhar,
+                    pan,
+                    uan,
+                    dept,
+                    designation,
+                    ctc,
+                    salary,
+                    j_str,
+                    c_end,
+                ),
+            )
+            conn.commit()
+            st.success(
+                f"✅ EMPLOYEE '{name}' ({emp_id}) REGISTERED SUCCESSFULLY!"
+            )
+
         conn.close()
 
 # ==============================================================================
@@ -610,10 +858,24 @@ elif choice == "📊 LEAVE REQUESTS":
 
     if not df_target_emp.empty:
       emp_rec = df_target_emp.iloc[0]
-      j_obj = datetime.strptime(emp_rec["joining_date"], "%Y-%m-%d").date()
-      act_date = j_obj + relativedelta(months=3)
 
-      st.info(f"PROBATION END DATE (3 MONTHS RULE): **{act_date}**")
+      try:
+        j_obj = datetime.strptime(
+            str(emp_rec["joining_date"]), "%Y-%m-%d"
+        ).date()
+        act_date = j_obj + relativedelta(months=3)
+      except:
+        act_date = datetime.now().date()
+
+      st.info(
+          f"PROBATION END DATE (3 MONTHS RULE): **{format_date_display(act_date.strftime('%Y-%m-%d'))}**"
+      )
+
+      st.write("### CURRENT BALANCE:")
+      b_c1, b_c2, b_c3 = st.columns(3)
+      b_c1.metric("CL BALANCE", format_days(emp_rec.get("cl_balance", 0)))
+      b_c2.metric("SL BALANCE", format_days(emp_rec.get("sl_balance", 0)))
+      b_c3.metric("PL BALANCE", format_days(emp_rec.get("pl_balance", 0)))
 
       with st.form("apply_leave_form"):
         col1, col2, col3 = st.columns(3)
@@ -621,13 +883,20 @@ elif choice == "📊 LEAVE REQUESTS":
         l_days = col2.number_input(
             "DAYS", min_value=0.5, max_value=15.0, step=0.5
         )
-        l_date = col3.date_input("LEAVE DATE", value=datetime.now())
+        l_date = col3.date_input(
+            "LEAVE DATE (DD/MM/YYYY)",
+            value=datetime.now().date(),
+            format="DD/MM/YYYY",
+        )
 
         btn_apply = st.form_submit_button("DEDUCT LEAVE", type="primary")
 
         if btn_apply:
           if l_date < act_date:
-            st.error(f"❌ REJECTED! PROBATION ACTIVE TILL {act_date}")
+            st.error(
+                "❌ REJECTED! PROBATION ACTIVE TILL"
+                f" {format_date_display(act_date.strftime('%Y-%m-%d'))}"
+            )
           else:
             col_map = {
                 "CL": "cl_balance",
@@ -640,25 +909,32 @@ elif choice == "📊 LEAVE REQUESTS":
                 f"SELECT {col_map[l_type]} FROM employees WHERE emp_id = ?",
                 (sel_emp_id,),
             )
-            curr_b = cursor.fetchone()[0]
+            res = cursor.fetchone()
 
-            if curr_b >= l_days:
-              cursor.execute(
-                  f"UPDATE employees SET {col_map[l_type]} = ? WHERE emp_id ="
-                  " ?",
-                  (curr_b - l_days, sel_emp_id),
-              )
-              conn.commit()
-              conn.close()
-              st.success(
-                  f"✅ LEAVE DEDUCTED! REMAINING {l_type}: {curr_b - l_days}"
-              )
-              st.rerun()
+            if res and res[0] is not None:
+              curr_b = float(res[0])
+              if curr_b >= l_days:
+                cursor.execute(
+                    f"UPDATE employees SET {col_map[l_type]} = ? WHERE emp_id"
+                    " = ?",
+                    (curr_b - l_days, sel_emp_id),
+                )
+                conn.commit()
+                conn.close()
+                st.success(
+                    f"✅ LEAVE DEDUCTED! REMAINING {l_type}:"
+                    f" {format_days(curr_b - l_days)}"
+                )
+                st.rerun()
+              else:
+                st.error(
+                    f"❌ INSUFFICIENT BALANCE! AVAILABLE {l_type}:"
+                    f" {format_days(curr_b)}"
+                )
+                conn.close()
             else:
-              st.error(
-                  f"❌ INSUFFICIENT BALANCE! AVAILABLE {l_type}: {curr_b}"
-              )
               conn.close()
+              st.error("EMPLOYEE RECORD NOT FOUND!")
 
 # ==============================================================================
 # 4. INVENTORY & ASSETS
