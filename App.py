@@ -185,7 +185,7 @@ def parse_date_input(d_input):
     return ""
 
 
-# FIXED STATUS COMPUTATION LOGIC
+# FIXED STATUS LOGIC
 def get_computed_status(status, doe, term_date):
     s_upper = str(status).upper() if status else "ACTIVE"
 
@@ -288,7 +288,7 @@ STANDARD_DEPTS = [
 ]
 
 # ==============================================================================
-# MODERN UI & CUSTOM STYLING
+# MODERN UI & CUSTOM STYLING (FIXED SIDEBAR & HIDDEN ARROW)
 # ==============================================================================
 
 st.set_page_config(
@@ -314,9 +314,15 @@ st.markdown(
     footer {visibility: hidden !important;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
 
-    /* Sidebar Clean styling */
+    /* --- HIDE SIDEBAR TOGGLE ARROW & FIX SIDEBAR --- */
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    
     [data-testid="stSidebar"] {
         background-color: #0F172A !important;
+        min-width: 260px !important;
+        max-width: 260px !important;
     }
     [data-testid="stSidebar"] * {
         color: #94A3B8 !important;
@@ -398,11 +404,11 @@ st.markdown(
 # ==============================================================================
 
 st.sidebar.markdown(
-    "<h2 style='color:#38BDF8 !important; font-weight:700;'>⚡ HR EMPLOYEES DERAILS</h2>",
+    "<h2 style='color:#38BDF8 !important; font-weight:700;'>⚡ HAPPY HR</h2>",
     unsafe_allow_html=True,
 )
 st.sidebar.markdown(
-    "<p style='font-size:11px; letter-spacing:1px; margin-bottom:25px;'>MANAGEMENT DASHBOARD</p>",
+    "<p style='font-size:11px; letter-spacing:1px; margin-bottom:25px;'>MAIN MENU</p>",
     unsafe_allow_html=True,
 )
 
@@ -547,7 +553,7 @@ elif choice == "👥 EMPLOYEES DIRECTORY":
 
     with col_title:
         st.markdown("## 👥 Employees Directory")
-        st.caption("Manage employee records, promotions, and profiles")
+        st.caption("Manage employee details, status, promotions, and working days")
 
     with col_actions:
         st.write(" ")
@@ -557,7 +563,7 @@ elif choice == "👥 EMPLOYEES DIRECTORY":
                 df_all_emp.to_excel(writer, sheet_name="EMPLOYEES", index=False)
             with open(file_name, "rb") as f:
                 st.download_button(
-                    "📤 EXPORT DATA",
+                    "📥 EXPORT DATA",
                     f,
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -572,7 +578,7 @@ elif choice == "👥 EMPLOYEES DIRECTORY":
         f_col1, f_col2, f_col3 = st.columns([2, 1.5, 1.5])
         search_query = f_col1.text_input(
             "🔎 SEARCH",
-            placeholder="Search by Name, Emp ID, Email, Location...",
+            placeholder="SEARCH BY NAME, EMP ID, EMAIL, LOCATION, PAN...",
             label_visibility="collapsed",
         )
 
@@ -1093,7 +1099,7 @@ elif choice == "👥 EMPLOYEES DIRECTORY":
                     value=str(
                         rec.get("location")
                         if pd.notna(rec.get("location"))
-                        else "MUMBAI"
+                        else "NEW DELHI"
                     ).upper(),
                 ).upper()
 
@@ -1367,7 +1373,7 @@ elif choice == "➕ ONBOARD EMPLOYEE":
         o_email = c4.text_input("OFFICE EMAIL").strip()
 
         c_loc, c_dob, c_stat = st.columns(3)
-        emp_location = c_loc.text_input("LOCATION", value="MUMBAI").upper().strip()
+        emp_location = c_loc.text_input("LOCATION", value="NEW DELHI").upper().strip()
         dob = c_dob.date_input("DATE OF BIRTH", value=date(1995, 1, 1), format="DD/MM/YYYY")
         emp_initial_status = c_stat.selectbox("JOINING TYPE", ["ACTIVE", "RE-JOINED"])
 
