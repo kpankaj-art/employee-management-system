@@ -29,8 +29,8 @@ def init_db():
             status TEXT DEFAULT 'ACTIVE',
             dob TEXT,
             joining_date TEXT NOT NULL,
-            doe TEXT,
-            termination_date TEXT,
+            doe TEXT DEFAULT '',
+            termination_date TEXT DEFAULT '',
             aadhar TEXT,
             pan TEXT,
             uan TEXT,
@@ -57,8 +57,8 @@ def init_db():
         "location": "TEXT DEFAULT 'WORK FROM OFFICE'",
         "status": "TEXT DEFAULT 'ACTIVE'",
         "dob": "TEXT",
-        "doe": "TEXT",
-        "termination_date": "TEXT",
+        "doe": "TEXT DEFAULT ''",
+        "termination_date": "TEXT DEFAULT ''",
         "aadhar": "TEXT",
         "pan": "TEXT",
         "uan": "TEXT",
@@ -129,7 +129,7 @@ def is_valid_date_str(d):
     if d is None:
         return False
     s = str(d).strip().upper()
-    return s not in ["", "NONE", "NAN", "NULL", "N/A"]
+    return s not in ["", "NONE", "NAN", "NULL", "N/A", "NAT"]
 
 
 def calculate_working_days(start_date_str, end_date_str=None):
@@ -200,7 +200,7 @@ def get_computed_status(status, doe, term_date):
         return "TERMINATED"
     if is_valid_date_str(doe):
         return "INACTIVE"
-    return "ACTIVE" if s_upper not in ["INACTIVE", "TERMINATED"] else s_upper
+    return "ACTIVE"
 
 
 def sync_leave_cycles(emp_id, target_date_str=None):
@@ -304,7 +304,6 @@ init_db()
 st.markdown(
     """
     <style>
-    /* Hide top header, toolbar, pencil/share/star icons, and main menu */
     header {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
@@ -312,7 +311,6 @@ st.markdown(
     [data-testid="stDecoration"] {visibility: hidden !important;}
     [data-testid="stStatusWidget"] {visibility: hidden !important;}
 
-    /* Sidebar and Base Theme */
     [data-testid="stSidebar"] {
         background-color: #0F172A !important;
         color: #F8FAFC !important;
@@ -345,7 +343,6 @@ st.markdown(
         text-transform: uppercase;
     }
 
-    /* Attendance Calendar Badges */
     .att-box {
         padding: 8px;
         border-radius: 8px;
@@ -454,7 +451,6 @@ if choice == "👥 EMPLOYEES":
 
         filtered_df = df_all_emp.copy()
 
-        # Compute Dynamic Status for Each Employee
         computed_statuses = []
         for _, r in filtered_df.iterrows():
             computed_statuses.append(
@@ -796,7 +792,7 @@ if choice == "👥 EMPLOYEES":
             )
 
             with st.form("edit_emp_form_full"):
-                st.markdown("##### 📌 STATUS & CLASSIFICATION")
+                st.markdown("##### 📌 STATUS & EXIT DETAILS")
                 s_c1, s_c2, s_c3 = st.columns(3)
                 curr_status = get_computed_status(
                     rec.get("status"),
@@ -818,24 +814,34 @@ if choice == "👥 EMPLOYEES":
                     "EMPLOYEE STATUS", status_options, index=s_idx
                 )
 
-                u_term_date = s_c2.text_input(
-                    "TERMINATION DATE (YYYY-MM-DD)",
-                    value=str(
-                        rec.get("termination_date")
-                        if is_valid_date_str(rec.get("termination_date"))
-                        else ""
-                    ),
-                    help="Fill if marking as Terminated",
+                # Termination Date Picker with Checkbox
+                has_term_date = is_valid_date_str(rec.get("termination_date"))
+                term_check = s_c2.checkbox("SET TERMINATION DATE", value=has_term_date)
+                default_term = (
+                    datetime.strptime(str(rec.get("termination_date")), "%Y-%m-%d").date()
+                    if has_term_date
+                    else datetime.now().date()
+                )
+                u_term_date_val = s_c2.date_input(
+                    "TERMINATION DATE",
+                    value=default_term,
+                    format="DD/MM/YYYY",
+                    disabled=not term_check,
                 )
 
-                u_doe_str = s_c3.text_input(
-                    "DATE OF EXIT / DOE (YYYY-MM-DD)",
-                    value=str(
-                        rec.get("doe")
-                        if is_valid_date_str(rec.get("doe"))
-                        else ""
-                    ),
-                    help="Filling DOE automatically marks Status as INACTIVE",
+                # DOE Date Picker with Checkbox (Fixes unwanted Inactive Status!)
+                has_doe_date = is_valid_date_str(rec.get("doe"))
+                doe_check = s_c3.checkbox("SET DATE OF EXIT (DOE)", value=has_doe_date)
+                default_doe = (
+                    datetime.strptime(str(rec.get("doe")), "%Y-%m-%d").date()
+                    if has_doe_date
+                    else datetime.now().date()
+                )
+                u_doe_val = s_c3.date_input(
+                    "DATE OF EXIT (DOE)",
+                    value=default_doe,
+                    format="DD/MM/YYYY",
+                    disabled=not doe_check,
                 )
 
                 st.markdown("##### 👤 PERSONAL & CONTACT DETAILS")
@@ -935,14 +941,14 @@ if choice == "👥 EMPLOYEES":
                     curr_doj = datetime.now().date()
 
                 u_dob_val = d_c1.date_input(
-                    "DOB (DD/MM/YYYY)",
+                    "DOB",
                     value=curr_dob,
                     min_value=date(1980, 1, 1),
                     max_value=datetime.now().date(),
                     format="DD/MM/YYYY",
                 )
                 u_doj_val = d_c2.date_input(
-                    "DOJ (DD/MM/YYYY)",
+                    "DOJ",
                     value=curr_doj,
                     min_value=date(2000, 1, 1),
                     format="DD/MM/YYYY",
@@ -1002,15 +1008,19 @@ if choice == "👥 EMPLOYEES":
 
                     u_dob_parsed = parse_date_input(u_dob_val)
                     u_doj_parsed = parse_date_input(u_doj_val)
-                    u_doe_parsed = parse_date_input(u_doe_str)
-                    u_term_parsed = parse_date_input(u_term_date)
+                    
+                    # Store clean dates or empty strings
+                    u_doe_parsed = parse_date_input(u_doe_val) if doe_check else ""
+                    u_term_parsed = parse_date_input(u_term_date_val) if term_check else ""
 
-                    # Auto status assignment
+                    # Automatic status computation logic
                     final_status = u_status
                     if is_valid_date_str(u_term_parsed):
                         final_status = "TERMINATED"
                     elif is_valid_date_str(u_doe_parsed):
                         final_status = "INACTIVE"
+                    elif final_status == "INACTIVE" and not is_valid_date_str(u_doe_parsed):
+                        final_status = "ACTIVE"
 
                     conn = get_connection()
                     cursor = conn.cursor()
@@ -1072,7 +1082,7 @@ if choice == "👥 EMPLOYEES":
                 st.rerun()
 
 # ==============================================================================
-# 2. CALENDAR ATTENDANCE MODULE (P, A, H, L INTELLIGENT TRACKING)
+# 2. CALENDAR ATTENDANCE MODULE
 # ==============================================================================
 elif choice == "📅 ATTENDANCE":
     st.markdown(
@@ -1128,7 +1138,6 @@ elif choice == "📅 ATTENDANCE":
         )
         sel_month_num = months_list.index(sel_month_name) + 1
 
-        # Fetch Saved Attendance Records from DB
         conn = get_connection()
         month_prefix = f"{sel_year}-{sel_month_num:02d}%"
         df_att = pd.read_sql_query(
@@ -1152,17 +1161,16 @@ elif choice == "📅 ATTENDANCE":
 
         final_month_status = {}
 
-        # Calculation of Days
         for week in cal:
             for day in week:
                 if day != 0:
                     date_obj = date(sel_year, sel_month_num, day)
                     date_str = f"{sel_year}-{sel_month_num:02d}-{day:02d}"
 
-                    is_sunday = date_obj.weekday() == 6  # Sunday
+                    is_sunday = date_obj.weekday() == 6
                     is_second_saturday = (date_obj.weekday() == 5) and (
                         8 <= day <= 14
-                    )  # 2nd Saturday
+                    )
 
                     if date_str in saved_att_dict:
                         st_val = saved_att_dict[date_str]
@@ -1183,7 +1191,6 @@ elif choice == "📅 ATTENDANCE":
                     elif st_val == "L":
                         l_count += 1
 
-        # Live Summary Counts Bar (Salary calculation friendly)
         st.write(" ")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("🟢 PRESENT (P)", f"{p_count} DAYS")
@@ -1564,11 +1571,9 @@ elif choice == "📊 LEAVE REQUESTS":
                 if start_date > end_date:
                     st.error("❌ END DATE CANNOT BE BEFORE START DATE!")
                 else:
-                    # Calculate total days
                     num_days = (end_date - start_date).days + 1
 
                     if "LOP" in l_type:
-                        # Auto update attendance with L
                         conn = get_connection()
                         cursor = conn.cursor()
                         curr_d = start_date
@@ -1608,13 +1613,11 @@ elif choice == "📊 LEAVE REQUESTS":
                             conn = get_connection()
                             cursor = conn.cursor()
 
-                            # 1. Update Leave Balance
                             cursor.execute(
                                 f"UPDATE employees SET {field} = ? WHERE emp_id = ?",
                                 (new_balance, selected_emp_id),
                             )
 
-                            # 2. Mark 'L' in Attendance table for dates
                             curr_d = start_date
                             while curr_d <= end_date:
                                 d_str = curr_d.strftime("%Y-%m-%d")
