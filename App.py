@@ -21,9 +21,9 @@ def init_db():
             emp_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             joining_date TEXT NOT NULL,
-            CL_balance REAL DEFAULT 3.0,
-            SL_balance REAL DEFAULT 3.0,
-            PL_balance REAL DEFAULT 1.0,
+            cl_balance REAL DEFAULT 3.0,
+            sl_balance REAL DEFAULT 3.0,
+            pl_balance REAL DEFAULT 1.0,
             cycle_start TEXT NOT NULL,
             cycle_end TEXT NOT NULL
         )
@@ -33,8 +33,8 @@ def init_db():
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Emp_ID TEXT,
-            Item_Name TEXT,
+            emp_id TEXT,
+            item_name TEXT,
             serial_number TEXT,
             assigned_date TEXT,
             status TEXT DEFAULT 'Assigned',
@@ -46,10 +46,10 @@ def init_db():
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Emp_ID TEXT,
-            Doc_Name TEXT,
-            File_path TEXT,
-            Upload_date TEXT,
+            emp_id TEXT,
+            doc_name TEXT,
+            file_path TEXT,
+            upload_date TEXT,
             FOREIGN KEY (emp_id) REFERENCES employees (emp_id)
         )
     """)
@@ -85,9 +85,9 @@ def sync_leave_cycles(emp_id, target_date_str=None):
 
     # 6 Month Carry Forward Addition
     while target_date >= cycle_end:
-      CL += 3.0
-      SL += 3.0
-      PL += 1.0
+      cl += 3.0
+      sl += 3.0
+      pl += 1.0
       new_cycle_start = cycle_end
       cycle_end = new_cycle_start + relativedelta(months=6)
 
@@ -98,9 +98,9 @@ def sync_leave_cycles(emp_id, target_date_str=None):
                 WHERE emp_id = ?
             """,
           (
-              CL,
-              SL,
-              PL,
+              cl,
+              sl,
+              pl,
               new_cycle_start.strftime("%Y-%m-%d"),
               cycle_end.strftime("%Y-%m-%d"),
               emp_id,
