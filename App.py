@@ -431,8 +431,6 @@ if not df_all_emp.empty:
 # 1. MODERN DASHBOARD OVERVIEW
 # ==============================================================================
 if choice == "📊 DASHBOARD":
-    st.markdown("## 📊 HR Executive Dashboard")
-    st.caption("Real-time organization metrics and workforce analytics")
 
     if df_all_emp.empty:
         st.info("👋 No employees found in the system. Add your first employee!")
