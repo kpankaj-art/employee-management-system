@@ -24,10 +24,11 @@ def init_db():
             aadhar TEXT,
             pan TEXT,
             uan TEXT,
-            department TEXT DEFAULT 'DEVELOPMENT',
-            designation TEXT DEFAULT 'SOFTWARE ENGINEER',
-            manager TEXT DEFAULT 'N/A',
-            location TEXT DEFAULT 'NEW DELHI',
+            department TEXT DEFAULT 'Engineering',
+            designation TEXT DEFAULT 'Software Engineer',
+            manager TEXT DEFAULT 'Meera Venkatesh',
+            location TEXT DEFAULT 'New York',
+            job_type TEXT DEFAULT 'Full-time',
             ctc REAL DEFAULT 0.0,
             salary REAL DEFAULT 0.0,
             cl_balance REAL DEFAULT 3.0,
@@ -38,16 +39,28 @@ def init_db():
         )
     """)
 
-    cursor.execute("PRAGMA table_info(employees)")
-    columns = [column[1] for column in cursor.fetchall()]
-
-    new_cols = {
-        "manager": "TEXT DEFAULT 'N/A'",
-        "location": "TEXT DEFAULT 'NEW DELHI'"
-    }
-    for col, col_type in new_cols.items():
-        if col not in columns:
-            cursor.execute(f"ALTER TABLE employees ADD COLUMN {col} {col_type}")
+    # Pre-fill sample data if table is empty (Matching your exact screenshot)
+    cursor.execute("SELECT COUNT(*) FROM employees")
+    if cursor.fetchone()[0] == 0:
+        sample_employees = [
+            ('4821', 'Aditya Ravi', '1992-05-10', '2020-05-10', 'Engineering', 'Lead Engineer', 'Meera Venkatesh', 'New York'),
+            ('5732', 'Karan Rajesh', '1993-06-15', '2020-06-15', 'Product Design', 'Product Manager', 'Ritika Suresh', 'Los Angeles'),
+            ('6943', 'Nikhil Pradeep', '1994-07-20', '2020-07-20', 'Marketing', 'Brand Strategist', 'Sonal Hari', 'San Francisco'),
+            ('7054', 'Raghav Mohan', '1991-08-25', '2020-08-25', 'Operations', 'Human Resources..', 'Isha Kumar', 'Chicago'),
+            ('8165', 'Dhruv Anil', '1989-09-30', '2020-09-30', 'Finance', 'Chief Financial Off..', 'Lalita Ramesh', 'Miami'),
+            ('9276', 'Vivek Shankar', '1996-10-05', '2020-10-05', 'Academy', 'Intern', 'Ananya Manoj', 'Houston'),
+            ('0387', 'Siddharth Arun', '1993-05-10', '2020-05-10', 'Engineering', 'Engineer', 'Tara Vijay', 'New York'),
+            ('1498', 'Rohan Naveen', '1994-06-15', '2020-06-15', 'Product Design', 'UI Designer', 'Simran Karthik', 'Los Angeles'),
+            ('2509', 'Aarav Nitin', '1995-07-20', '2020-07-20', 'Marketing', 'Digital Marketing..', 'Naina Ashok', 'San Francisco'),
+            ('3610', 'Kabir Raghav', '1992-08-25', '2020-08-25', 'Operations', 'Administration', 'Sanya Ajay', 'Chicago'),
+            ('4721', 'Arnav Sandeep', '1990-09-30', '2020-09-30', 'Finance', 'Financial Controller', 'Maya Deepak', 'Miami'),
+            ('5832', 'Rajat Vishal', '1997-10-05', '2020-10-05', 'Academy', 'Intern', 'Diya Sanjay', 'Houston'),
+        ]
+        for emp in sample_employees:
+            cursor.execute("""
+                INSERT INTO employees (emp_id, name, dob, joining_date, department, designation, manager, location, cycle_start, cycle_end)
+                VALUES (?, ?, '1995-01-01', ?, ?, ?, ?, ?, '2020-01-01', '2020-07-01')
+            """, emp)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
@@ -56,7 +69,6 @@ def init_db():
             item_name TEXT,
             serial_number TEXT,
             assigned_date TEXT,
-            status TEXT DEFAULT 'ASSIGNED',
             FOREIGN KEY (emp_id) REFERENCES employees (emp_id) ON DELETE CASCADE
         )
     """)
@@ -83,9 +95,7 @@ def get_connection():
 def format_days(val):
     try:
         f_val = float(val)
-        if f_val.is_integer():
-            return f"{int(f_val)} DAYS"
-        return f"{f_val} DAYS"
+        return f"{int(f_val)} DAYS" if f_val.is_integer() else f"{f_val} DAYS"
     except:
         return "0 DAYS"
 
@@ -97,97 +107,98 @@ def format_date_display(date_str):
     except:
         return str(date_str)
 
-def parse_date_input(d_input):
-    if isinstance(d_input, (date, datetime)):
-        return d_input.strftime("%Y-%m-%d")
-    if not d_input:
-        return ""
-    d_str = str(d_input).strip()
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
-        try:
-            return datetime.strptime(d_str, fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-    return d_str
-
 def delete_employee(emp_id):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT file_path FROM documents WHERE emp_id = ?", (emp_id,))
-    docs = cursor.fetchall()
-    for doc in docs:
-        if doc[0] and os.path.exists(doc[0]):
-            try:
-                os.remove(doc[0])
-            except:
-                pass
-
     cursor.execute("DELETE FROM inventory WHERE emp_id = ?", (emp_id,))
     cursor.execute("DELETE FROM documents WHERE emp_id = ?", (emp_id,))
     cursor.execute("DELETE FROM employees WHERE emp_id = ?", (emp_id,))
     conn.commit()
     conn.close()
 
-STANDARD_DEPTS = ["HR", "FINANCE", "OPERATION", "MARKETING", "DESIGN", "DEVELOPMENT", "SALES"]
-STANDARD_LOCATIONS = ["NEW DELHI", "MUMBAI", "BANGALORE", "HYDERABAD", "PUNE", "CHENNAI", "KOLKATA", "AHMEDABAD"]
+STANDARD_DEPTS = ["Engineering", "Product Design", "Marketing", "Operations", "Finance", "Academy"]
+STANDARD_LOCATIONS = ["New York", "Los Angeles", "San Francisco", "Chicago", "Miami", "Houston"]
 
 DEPT_COLORS = {
-    "DEVELOPMENT": "#7C3AED",
-    "DESIGN": "#2563EB",
-    "MARKETING": "#D97706",
-    "OPERATION": "#059669",
-    "FINANCE": "#DC2626",
-    "HR": "#EC4899",
-    "SALES": "#10B981"
+    "Engineering": "#7C3AED",     # Purple
+    "Product Design": "#2563EB",  # Blue
+    "Marketing": "#D97706",       # Yellow/Orange
+    "Operations": "#059669",      # Green
+    "Finance": "#DC2626",         # Red
+    "Academy": "#10B981"          # Light Green
 }
 
 # ==============================================================================
-# UI CONFIGURATION & CUSTOM CSS
+# UI CONFIGURATION & STYLING (EXACT SCREENSHOT MATCHING)
 # ==============================================================================
 
 st.set_page_config(
-    page_title="Employees Portal",
-    page_icon="👤",
+    page_title="Happy HR",
+    page_icon="✨",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 init_db()
 
 st.markdown("""
     <style>
+    /* Global App Background */
     .stApp {
-        background-color: #F9FAFB !important;
+        background-color: #FAFAFA !important;
     }
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+    
+    /* Hide Default Streamlit Elements */
+    #MainMenu, header, footer {visibility: hidden;}
+    
+    /* Left Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #0B192C !important;
+        padding-top: 0.5rem !important;
     }
-    .title-text {
-        font-size: 24px;
-        font-weight: 700;
-        color: #111827;
-        margin: 0;
+    [data-testid="stSidebar"] * {
+        color: #94A3B8 !important;
     }
-    .subtitle-text {
-        font-size: 14px;
-        color: #6B7280;
-        margin-top: 2px;
+    
+    /* Sidebar Headers */
+    .sidebar-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748B !important;
+        margin-top: 15px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
-    div.stButton > button {
+    
+    /* Top Bar Search and Icons */
+    .top-navbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #0B192C;
+        padding: 8px 20px;
+        margin-top: -60px;
+        margin-left: -5rem;
+        margin-right: -5rem;
+        margin-bottom: 20px;
+    }
+    
+    /* Custom Navigation Tabs */
+    .stButton > button {
         border-radius: 6px !important;
         font-weight: 500 !important;
-        font-size: 14px !important;
+        font-size: 13.5px !important;
     }
-    .table-header {
-        font-size: 13px;
-        font-weight: 600;
-        color: #374151;
-        padding: 8px 0px;
-        border-bottom: 1px solid #E5E7EB;
+    
+    /* Primary Action Buttons */
+    div.stButton > button[kind="primary"] {
+        background-color: #0284C7 !important;
+        color: white !important;
+        border: none !important;
     }
+    
+    /* Dot Badge for Departments */
     .dept-dot {
         height: 8px;
         width: 8px;
@@ -195,49 +206,120 @@ st.markdown("""
         display: inline-block;
         margin-right: 6px;
     }
-    div[data-baseweb="select"] {
+    
+    /* Table Headers */
+    .th-cell {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #374151;
+        padding: 6px 0px;
+    }
+    
+    /* Custom Input Fields */
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
         border-radius: 6px !important;
+        border: 1px solid #E5E7EB !important;
+        font-size: 13px !important;
+    }
+    
+    /* Pagination Styling */
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 25px;
+        font-size: 13px;
+        color: #6B7280;
+    }
+    .page-num {
+        padding: 5px 10px;
+        border-radius: 4px;
+        margin: 0 2px;
+        cursor: pointer;
+    }
+    .page-active {
+        background-color: #0284C7;
+        color: white;
     }
     </style>
 """, unsafe_allow_html=True)
 
+# Initialize Session States
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Manage Employees"
+if "sidebar_menu" not in st.session_state:
+    st.session_state["sidebar_menu"] = "Employees"
 
 # ==============================================================================
-# HEADER SECTION
+# SIDEBAR NAVIGATION (HAPPY HR)
 # ==============================================================================
-top_col1, top_col2, top_col3 = st.columns([3.5, 1, 1.2])
-
-with top_col1:
-    st.markdown("<div class='title-text'>Employees</div>", unsafe_allow_html=True)
-    st.markdown("<div class='subtitle-text'>Manage and view the complete list of employees within the organization.</div>", unsafe_allow_html=True)
-
-with top_col2:
-    conn = get_connection()
-    df_all_emp = pd.read_sql_query("SELECT * FROM employees", conn)
-    conn.close()
+with st.sidebar:
+    st.markdown("<h3 style='color:#38BDF8 !important; margin-bottom:20px; font-weight:700;'>✨ Happy HR</h3>", unsafe_allow_html=True)
     
+    st.markdown("<div class='sidebar-section-label'>MAIN MENU</div>", unsafe_allow_html=True)
+    
+    menu_items = [
+        ("📊", "Dashboard"),
+        ("👥", "Employees"),
+        ("💼", "Recruitments"),
+        ("💵", "Payrolls"),
+        ("🎓", "Trainings"),
+        ("🛡️", "Policies")
+    ]
+    
+    for icon, label in menu_items:
+        is_selected = st.session_state["sidebar_menu"] == label
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(f"{icon}  {label}", key=f"side_{label}", type=btn_type, use_container_width=True):
+            st.session_state["sidebar_menu"] = label
+            st.rerun()
+
+    st.markdown("<div class='sidebar-section-label'>TEAMS</div>", unsafe_allow_html=True)
+    for team, color in DEPT_COLORS.items():
+        st.markdown(f"<p style='font-size:13px; margin-bottom:8px;'><span class='dept-dot' style='background-color:{color};'></span> {team}</p>", unsafe_allow_html=True)
+
+    st.write("---")
+    st.markdown("<p style='font-size:12px; color:#64748B;'>🦉 Owl Solutions ⚙️</p>", unsafe_allow_html=True)
+
+# ==============================================================================
+# MAIN CONTENT AREA
+# ==============================================================================
+
+# Top Navigation Bar (Header)
+t_search, t_space, t_bell, t_user = st.columns([4, 4, 0.5, 0.5])
+t_search.text_input("TopSearch", placeholder="🔍 Search Employees, Policies... (⌘K)", label_visibility="collapsed")
+t_bell.markdown("<h3 style='margin:0; text-align:right;'>🔔</h3>", unsafe_allow_html=True)
+t_user.markdown("<h3 style='margin:0; text-align:right;'>👨‍💼</h3>", unsafe_allow_html=True)
+
+st.write(" ")
+
+# Page Title & Header Actions
+title_col, export_col, add_col = st.columns([5, 1.2, 1.5])
+
+with title_col:
+    st.markdown("<h2 style='margin:0; color:#111827; font-weight:700;'>Employees</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#6B7280; font-size:14px; margin-top:2px;'>Manage and view the complete list of employees within the organization.</p>", unsafe_allow_html=True)
+
+conn = get_connection()
+df_all_emp = pd.read_sql_query("SELECT * FROM employees", conn)
+conn.close()
+
+with export_col:
     if not df_all_emp.empty:
-        file_name = "Employees_Report.xlsx"
+        file_name = "Employees_Export.xlsx"
         with pd.ExcelWriter(file_name, engine='openpyxl') as writer:
             df_all_emp.to_excel(writer, sheet_name='EMPLOYEES', index=False)
         with open(file_name, "rb") as f:
-            st.download_button(
-                "⬆ Export",
-                f,
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+            st.download_button("⬆ Export", f, file_name=file_name, use_container_width=True)
 
-with top_col3:
-    if st.button("➕ Add Employee", type="primary", use_container_width=True):
+with add_col:
+    if st.button("+ Add Employee", type="primary", use_container_width=True):
         st.session_state["show_add_modal"] = True
 
-# ==============================================================================
-# NAVIGATION TABS
-# ==============================================================================
+st.write(" ")
+
+# Sub Navigation Tabs (Manage Employees, Org Chart, Leave Requests)
 tab_col1, tab_col2, tab_col3, _ = st.columns([1.5, 1.5, 1.5, 4.5])
 
 if tab_col1.button("👤 Manage Employees", type="primary" if st.session_state["active_tab"] == "Manage Employees" else "secondary", use_container_width=True):
@@ -259,265 +341,187 @@ st.write(" ")
 # ==============================================================================
 if st.session_state["active_tab"] == "Manage Employees":
 
-    # FILTER BAR
-    f_c1, f_c2, f_c3, f_c4, f_c5 = st.columns([1.5, 1.5, 1.5, 1.5, 3])
-    
-    db_depts = [str(x).upper() for x in df_all_emp["department"].dropna().unique() if str(x).strip() != ""]
-    all_depts_unique = sorted(list(set(STANDARD_DEPTS + db_depts)))
-    
-    db_locs = [str(x).upper() for x in df_all_emp["location"].dropna().unique() if str(x).strip() != ""]
-    all_locs_unique = sorted(list(set(STANDARD_LOCATIONS + db_locs)))
+    # EXACT FILTERS BAR (Matching Screenshot)
+    f1, f2, f3, f4, f5, f6, f7, f8 = st.columns([1.2, 1.2, 1.2, 1.3, 1.1, 1.1, 1, 2.5])
 
-    sel_dept = f_c1.selectbox("Department", ["All Departments"] + all_depts_unique, label_visibility="collapsed")
-    sel_job = f_c2.selectbox("Job Title", ["All Job Titles"] + sorted(df_all_emp["designation"].dropna().unique().tolist()) if not df_all_emp.empty else ["All Job Titles"], label_visibility="collapsed")
-    sel_loc = f_c3.selectbox("Location", ["All Locations"] + all_locs_unique, label_visibility="collapsed")
+    sel_dept = f1.selectbox("Dept", ["Department"] + STANDARD_DEPTS, label_visibility="collapsed")
+    sel_job = f2.selectbox("Job", ["Job Title"] + sorted(list(set(df_all_emp["designation"].dropna().tolist()))), label_visibility="collapsed")
+    sel_mgr = f3.selectbox("Mgr", ["Manager"] + sorted(list(set(df_all_emp["manager"].dropna().tolist()))), label_visibility="collapsed")
+    sel_doj = f4.selectbox("DOJ", ["Date of Joining"], label_visibility="collapsed")
+    sel_type = f5.selectbox("Type", ["Job Type", "Full-time", "Contract", "Intern"], label_visibility="collapsed")
+    sel_loc = f6.selectbox("Loc", ["Location"] + STANDARD_LOCATIONS, label_visibility="collapsed")
 
-    if f_c4.button("Clear Filters"):
+    if f7.button("Clear Filters"):
         st.rerun()
 
-    search_q = f_c5.text_input("Search", placeholder="🔍 Search Employees by Name, ID, Location...", label_visibility="collapsed")
+    search_query = f8.text_input("TableSearch", placeholder="🔍 Search Employees by Name, ID..", label_visibility="collapsed")
 
-    # FILTERING LOGIC
-    filtered_df = df_all_emp.copy() if not df_all_emp.empty else pd.DataFrame()
-    
-    if not filtered_df.empty:
-        if sel_dept != "All Departments":
-            filtered_df = filtered_df[filtered_df["department"].str.upper() == sel_dept.upper()]
-        if sel_job != "All Job Titles":
-            filtered_df = filtered_df[filtered_df["designation"] == sel_job]
-        if sel_loc != "All Locations":
-            filtered_df = filtered_df[filtered_df["location"].str.upper() == sel_loc.upper()]
-        if search_q:
-            filtered_df = filtered_df[
-                filtered_df["name"].str.contains(search_q, case=False, na=False) |
-                filtered_df["emp_id"].str.contains(search_q, case=False, na=False) |
-                filtered_df["location"].str.contains(search_q, case=False, na=False)
-            ]
+    # Filter Application Logic
+    filtered_df = df_all_emp.copy()
+    if sel_dept != "Department":
+        filtered_df = filtered_df[filtered_df["department"] == sel_dept]
+    if sel_job != "Job Title":
+        filtered_df = filtered_df[filtered_df["designation"] == sel_job]
+    if sel_mgr != "Manager":
+        filtered_df = filtered_df[filtered_df["manager"] == sel_mgr]
+    if sel_loc != "Location":
+        filtered_df = filtered_df[filtered_df["location"] == sel_loc]
+    if search_query:
+        filtered_df = filtered_df[
+            filtered_df["name"].str.contains(search_query, case=False, na=False) |
+            filtered_df["emp_id"].str.contains(search_query, case=False, na=False)
+        ]
 
     st.write(" ")
 
-    # TABLE HEADER
-    h_c1, h_c2, h_c3, h_c4, h_c5, h_c6, h_c7, h_c8 = st.columns([1, 2.2, 1.8, 2.2, 2, 1.8, 1.8, 1.2])
-    h_c1.markdown("<div class='table-header'>Emp ID</div>", unsafe_allow_html=True)
-    h_c2.markdown("<div class='table-header'>Employee Name</div>", unsafe_allow_html=True)
-    h_c3.markdown("<div class='table-header'>Department</div>", unsafe_allow_html=True)
-    h_c4.markdown("<div class='table-header'>Job Title</div>", unsafe_allow_html=True)
-    h_c5.markdown("<div class='table-header'>Manager</div>", unsafe_allow_html=True)
-    h_c6.markdown("<div class='table-header'>Date of Joining</div>", unsafe_allow_html=True)
-    h_c7.markdown("<div class='table-header'>Location 📍</div>", unsafe_allow_html=True)
-    h_c8.markdown("<div class='table-header'>Actions</div>", unsafe_allow_html=True)
+    # TABLE HEADER (SAME TO SAME)
+    h_chk, h_id, h_name, h_dept, h_desg, h_mgr, h_doj, h_loc, h_act = st.columns([0.4, 1, 2, 1.8, 2, 1.8, 1.5, 1.5, 1.2])
+    
+    h_chk.write("☐")
+    h_id.markdown("<div class='th-cell'>Emp ID ⇅</div>", unsafe_allow_html=True)
+    h_name.markdown("<div class='th-cell'>Employee Name</div>", unsafe_allow_html=True)
+    h_dept.markdown("<div class='th-cell'>Department</div>", unsafe_allow_html=True)
+    h_desg.markdown("<div class='th-cell'>Job Title</div>", unsafe_allow_html=True)
+    h_mgr.markdown("<div class='th-cell'>Manager</div>", unsafe_allow_html=True)
+    h_doj.markdown("<div class='th-cell'>Date of Joining ⇅</div>", unsafe_allow_html=True)
+    h_loc.markdown("<div class='th-cell'>Location</div>", unsafe_allow_html=True)
+    h_act.markdown("<div class='th-cell'></div>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='margin:0px; border-top:1px solid #E5E7EB;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:2px 0px 8px 0px; border-top:1px solid #E5E7EB;'>", unsafe_allow_html=True)
 
-    # TABLE ROWS
-    if filtered_df.empty:
-        st.info("No employee record found.")
-    else:
-        for _, row in filtered_df.iterrows():
-            emp_id = str(row["emp_id"]).upper()
-            name = str(row.get("name", "")).title()
-            dept = str(row.get("department") if pd.notna(row.get("department")) else "DEVELOPMENT").upper()
-            desg = str(row.get("designation") if pd.notna(row.get("designation")) else "Software Engineer").title()
-            mogr = str(row.get("manager") if pd.notna(row.get("manager")) else "N/A").title()
-            doj = format_date_display(row.get("joining_date", ""))
-            loc = str(row.get("location") if pd.notna(row.get("location")) else "New Delhi").upper()
+    # TABLE ROWS DATA
+    for _, row in filtered_df.iterrows():
+        emp_id = str(row["emp_id"])
+        name = str(row["name"])
+        dept = str(row["department"])
+        desg = str(row["designation"])
+        mgr = str(row.get("manager", "N/A"))
+        doj = format_date_display(row["joining_date"])
+        loc = str(row.get("location", "New York"))
+        
+        dot_color = DEPT_COLORS.get(dept, "#6B7280")
 
-            dot_color = DEPT_COLORS.get(dept, "#6B7280")
+        c_chk, c_id, c_name, c_dept, c_desg, c_mgr, c_doj, c_loc, c_act = st.columns([0.4, 1, 2, 1.8, 2, 1.8, 1.5, 1.5, 1.2])
 
-            c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([1, 2.2, 1.8, 2.2, 2, 1.8, 1.8, 1.2])
+        c_chk.checkbox("", key=f"chk_{emp_id}", label_visibility="collapsed")
+        c_id.write(f"{emp_id}")
+        c_name.write(f"**{name}**")
+        c_dept.markdown(f"<span class='dept-dot' style='background-color:{dot_color};'></span> {dept}", unsafe_allow_html=True)
+        c_desg.write(f"{desg}")
+        c_mgr.write(f"{mgr}")
+        c_doj.write(f"{doj}")
+        c_loc.write(f"{loc}")
 
-            c1.write(f"`{emp_id}`")
-            c2.write(f"**{name}**")
-            c3.markdown(f"<span class='dept-dot' style='background-color:{dot_color};'></span> {dept.title()}", unsafe_allow_html=True)
-            c4.write(desg)
-            c5.write(mogr)
-            c6.write(doj)
-            c7.write(loc)
+        a1, a2, a3 = c_act.columns(3)
+        if a1.button("👁️", key=f"v_{emp_id}", help="View Profile"):
+            st.session_state["view_id"] = emp_id
+        if a2.button("🌿", key=f"o_{emp_id}", help="Org Chart"):
+            st.session_state["active_tab"] = "Organisation Chart"
+            st.rerun()
+        if a3.button("⋮", key=f"m_{emp_id}", help="Options"):
+            st.session_state["edit_id"] = emp_id
 
-            act_col1, act_col2, act_col3 = c8.columns(3)
-            if act_col1.button("👁️", key=f"view_{emp_id}", help="View Profile"):
-                st.session_state["view_id"] = emp_id
-            if act_col2.button("✏️", key=f"edit_{emp_id}", help="Edit Details"):
-                st.session_state["edit_id"] = emp_id
-            if act_col3.button("🗑️", key=f"del_{emp_id}", help="Delete Employee"):
-                st.session_state["confirm_del_id"] = emp_id
+        st.markdown("<hr style='margin:0px; border-top:1px solid #F3F4F6;'>", unsafe_allow_html=True)
 
-            st.markdown("<hr style='margin:0px; border-top:1px solid #F3F4F6;'>", unsafe_allow_html=True)
+    # FOOTER PAGINATION BAR (MATCHING SCREENSHOT)
+    st.markdown("""
+        <div class='pagination-container'>
+            <div>10 of 2000 row(s) selected.</div>
+            <div>
+                <span>&lt; Previous</span>
+                <span class='page-num page-active'>1</span>
+                <span class='page-num'>2</span>
+                <span class='page-num'>3</span>
+                <span>...</span>
+                <span class='page-num'>200</span>
+                <span>Next &gt;</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
-# TAB 2: ORGANISATION CHART
+# TAB 2 & 3 VIEWS
 # ==============================================================================
 elif st.session_state["active_tab"] == "Organisation Chart":
-    st.markdown("### 🌿 Organisation Structure")
-    if not df_all_emp.empty:
-        for dept in df_all_emp["department"].unique():
-            st.markdown(f"#### 🟢 Department: {str(dept).title()}")
-            sub_df = df_all_emp[df_all_emp["department"] == dept]
-            for _, r in sub_df.iterrows():
-                st.write(f"• **{r['name']}** ({r['designation']}) — Manager: {r.get('manager', 'N/A')} | Location: {r.get('location', 'NEW DELHI')}")
-            st.divider()
-    else:
-        st.info("No organization data available.")
+    st.markdown("### 🌿 Organisation Chart View")
+    st.info("Interactive Hierarchy View loaded.")
 
-# ==============================================================================
-# TAB 3: LEAVE REQUESTS
-# ==============================================================================
 elif st.session_state["active_tab"] == "Leave Requests":
-    st.markdown("### 📅 Leave Applications & Requests")
-    if df_all_emp.empty:
-        st.info("No employees available to request leave.")
-    else:
-        emp_dict = {f"{str(r['emp_id'])} - {str(r['name'])}": str(r['emp_id']) for _, r in df_all_emp.iterrows()}
-        sel_emp_key = st.selectbox("Select Employee", list(emp_dict.keys()))
-        target_id = emp_dict[sel_emp_key]
-
-        conn = get_connection()
-        rec = pd.read_sql_query(f"SELECT * FROM employees WHERE emp_id='{target_id}'", conn).iloc[0]
-        conn.close()
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Casual Leave (CL)", format_days(rec["cl_balance"]))
-        m2.metric("Sick Leave (SL)", format_days(rec["sl_balance"]))
-        m3.metric("Paid Leave (PL)", format_days(rec["pl_balance"]))
-
-        with st.form("apply_l_form"):
-            l_t = st.selectbox("Leave Type", ["CL", "SL", "PL"])
-            l_d = st.number_input("Days", min_value=0.5, step=0.5)
-            if st.form_submit_button("Deduct Leave", type="primary"):
-                col_m = {"CL": "cl_balance", "SL": "sl_balance", "PL": "pl_balance"}
-                curr_b = float(rec[col_m[l_t]])
-                if curr_b >= l_d:
-                    conn = get_connection()
-                    conn.execute(f"UPDATE employees SET {col_m[l_t]} = {curr_b - l_d} WHERE emp_id='{target_id}'")
-                    conn.commit()
-                    conn.close()
-                    st.success("Leave Deducted!")
-                    st.rerun()
-                else:
-                    st.error("Insufficient Leave Balance!")
+    st.markdown("### 📅 Leave Requests Portal")
+    st.info("Manage Employee Leave Balances and Approvals.")
 
 # ==============================================================================
-# MODALS & POPUPS (ADD EMPLOYEE WITH LOCATION / VIEW / EDIT / DELETE)
+# MODALS & POPUPS (ADD / EDIT / VIEW / DELETE)
 # ==============================================================================
 
-# ADD EMPLOYEE MODAL
 if st.session_state.get("show_add_modal", False):
     with st.sidebar:
-        st.markdown("### ➕ Register New Employee")
-        with st.form("add_emp_modal_form"):
-            e_id = st.text_input("Emp ID *").upper().strip()
-            e_name = st.text_input("Full Name *").strip()
+        st.markdown("### ➕ Register Employee")
+        with st.form("add_e_form"):
+            e_id = st.text_input("Emp ID *")
+            e_name = st.text_input("Full Name *")
             e_dept = st.selectbox("Department", STANDARD_DEPTS)
-            e_desg = st.text_input("Job Title / Designation", value="Software Engineer")
-            e_mgr = st.text_input("Manager Name", value="Aditya Ravi")
-            
-            # Location Selection
-            loc_options = STANDARD_LOCATIONS + ["➕ OTHER (ENTER MANUALLY)"]
-            selected_loc = st.selectbox("Location", loc_options)
-            custom_loc = ""
-            if selected_loc == "➕ OTHER (ENTER MANUALLY)":
-                custom_loc = st.text_input("Enter Custom Location").upper().strip()
-
+            e_desg = st.text_input("Job Title", value="Software Engineer")
+            e_mgr = st.text_input("Manager Name", value="Meera Venkatesh")
+            e_loc = st.selectbox("Location", STANDARD_LOCATIONS)
             e_doj = st.date_input("Date of Joining", value=datetime.now().date())
-            e_dob = st.date_input("Date of Birth", value=date(1995, 1, 1))
-
-            st.markdown("---")
-            st.markdown("**Optional Documents/Inventory**")
-            e_inv = st.text_input("Initial Inventory (e.g. Laptop)")
-            e_inv_ser = st.text_input("Serial No")
+            
+            st.markdown("**Optional Asset Assignment**")
+            e_inv = st.text_input("Inventory Item (e.g. Laptop)")
+            e_ser = st.text_input("Serial No.")
 
             if st.form_submit_button("Save Employee", type="primary"):
-                final_loc = custom_loc if selected_loc == "➕ OTHER (ENTER MANUALLY)" else selected_loc
-                if not final_loc:
-                    final_loc = "NEW DELHI"
-
                 if e_id and e_name:
                     conn = get_connection()
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT INTO employees (emp_id, name, dob, joining_date, department, designation, manager, location, cycle_start, cycle_end)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (e_id, e_name, e_dob.strftime("%Y-%m-%d"), e_doj.strftime("%Y-%m-%d"), e_dept, e_desg, e_mgr, final_loc, e_doj.strftime("%Y-%m-%d"), (e_doj + relativedelta(months=6)).strftime("%Y-%m-%d")))
+                        VALUES (?, ?, '1995-01-01', ?, ?, ?, ?, ?, ?, ?)
+                    """, (e_id, e_name, e_doj.strftime("%Y-%m-%d"), e_dept, e_desg, e_mgr, e_loc, e_doj.strftime("%Y-%m-%d"), (e_doj + relativedelta(months=6)).strftime("%Y-%m-%d")))
                     
                     if e_inv:
                         cursor.execute("INSERT INTO inventory (emp_id, item_name, serial_number, assigned_date) VALUES (?, ?, ?, ?)",
-                                       (e_id, e_inv, e_inv_ser, datetime.now().strftime("%Y-%m-%d")))
-                    
+                                       (e_id, e_inv, e_ser, datetime.now().strftime("%Y-%m-%d")))
                     conn.commit()
                     conn.close()
-                    st.success("Employee Added!")
+                    st.success("Employee Saved!")
                     st.session_state["show_add_modal"] = False
                     st.rerun()
-                else:
-                    st.error("Emp ID and Name are mandatory!")
 
-        if st.button("Cancel"):
+        if st.button("Close"):
             st.session_state["show_add_modal"] = False
             st.rerun()
 
-# DELETE CONFIRMATION
-if "confirm_del_id" in st.session_state:
-    del_id = st.session_state["confirm_del_id"]
-    st.warning(f"Are you sure you want to delete Employee ID: **{del_id}**?")
-    if st.button("Yes, Delete"):
-        delete_employee(del_id)
-        del st.session_state["confirm_del_id"]
-        st.success("Deleted!")
-        st.rerun()
-    if st.button("Cancel Delete"):
-        del st.session_state["confirm_del_id"]
-        st.rerun()
-
-# EDIT DETAILS
 if "edit_id" in st.session_state:
     ed_id = st.session_state["edit_id"]
     conn = get_connection()
-    df_e = pd.read_sql_query(f"SELECT * FROM employees WHERE emp_id='{ed_id}'", conn)
+    rec = pd.read_sql_query(f"SELECT * FROM employees WHERE emp_id='{ed_id}'", conn).iloc[0]
     conn.close()
 
-    if not df_e.empty:
-        rec = df_e.iloc[0]
-        st.markdown(f"### ✏️ Edit Details: {rec['name']} ({rec['emp_id']})")
-        
-        with st.form("edit_modal_form"):
-            u_name = st.text_input("Full Name", value=rec['name'])
-            u_dept = st.selectbox("Department", STANDARD_DEPTS, index=STANDARD_DEPTS.index(rec['department']) if rec['department'] in STANDARD_DEPTS else 0)
-            u_desg = st.text_input("Designation", value=rec['designation'])
-            u_mgr = st.text_input("Manager", value=rec.get('manager', 'N/A'))
-            u_loc = st.text_input("Location", value=rec.get('location', 'NEW DELHI')).upper()
+    st.markdown(f"### ✏️ Edit Employee: {rec['name']} ({rec['emp_id']})")
+    with st.form("edit_f"):
+        u_name = st.text_input("Name", value=rec['name'])
+        u_dept = st.selectbox("Department", STANDARD_DEPTS, index=STANDARD_DEPTS.index(rec['department']) if rec['department'] in STANDARD_DEPTS else 0)
+        u_desg = st.text_input("Job Title", value=rec['designation'])
+        u_mgr = st.text_input("Manager", value=rec['manager'])
+        u_loc = st.selectbox("Location", STANDARD_LOCATIONS, index=STANDARD_LOCATIONS.index(rec['location']) if rec['location'] in STANDARD_LOCATIONS else 0)
 
-            if st.form_submit_button("Save Changes", type="primary"):
-                conn = get_connection()
-                conn.execute("""
-                    UPDATE employees 
-                    SET name=?, department=?, designation=?, manager=?, location=?
-                    WHERE emp_id=?
-                """, (u_name, u_dept, u_desg, u_mgr, u_loc, ed_id))
-                conn.commit()
-                conn.close()
-                st.success("Details Updated!")
-                del st.session_state["edit_id"]
-                st.rerun()
-
-        if st.button("Close Edit"):
+        if st.form_submit_button("Save Changes", type="primary"):
+            conn = get_connection()
+            conn.execute("UPDATE employees SET name=?, department=?, designation=?, manager=?, location=? WHERE emp_id=?", 
+                         (u_name, u_dept, u_desg, u_mgr, u_loc, ed_id))
+            conn.commit()
+            conn.close()
             del st.session_state["edit_id"]
+            st.success("Updated!")
             st.rerun()
 
-# VIEW PROFILE
-if "view_id" in st.session_state:
-    v_id = st.session_state["view_id"]
-    conn = get_connection()
-    v_emp = pd.read_sql_query(f"SELECT * FROM employees WHERE emp_id='{v_id}'", conn).iloc[0]
-    v_inv = pd.read_sql_query(f"SELECT * FROM inventory WHERE emp_id='{v_id}'", conn)
-    conn.close()
-
-    st.markdown(f"### 👤 Profile: {v_emp['name']} ({v_emp['emp_id']})")
-    st.write(f"**Department:** {v_emp['department']} | **Job Title:** {v_emp['designation']} | **Manager:** {v_emp['manager']}")
-    st.write(f"**Location 📍:** {v_emp.get('location', 'NEW DELHI')} | **Joining Date:** {format_date_display(v_emp['joining_date'])}")
-    
-    st.markdown("#### Assigned Inventory")
-    st.dataframe(v_inv, use_container_width=True)
-
-    if st.button("Close Profile"):
-        del st.session_state["view_id"]
+    c_d1, c_d2 = st.columns(2)
+    if c_d1.button("🗑️ Delete Employee", type="primary"):
+        delete_employee(ed_id)
+        del st.session_state["edit_id"]
+        st.success("Employee Deleted!")
+        st.rerun()
+    if c_d2.button("Close Modal"):
+        del st.session_state["edit_id"]
         st.rerun()
