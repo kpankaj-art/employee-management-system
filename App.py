@@ -82,7 +82,7 @@ st.markdown("""
         width: 100%;
     }
 
-    div.stButton > button[key^="edit_"] {
+    div.stButton > button[key^="edit_"], div.stButton > button[key^="sal_"] {
         background-color: #28a745 !important;
         color: white !important;
         border: none !important;
@@ -172,16 +172,20 @@ def init_db():
             dob TEXT,
             doe TEXT,
             inventory_details TEXT,
-            documents_uploaded TEXT
+            documents_uploaded TEXT,
+            salary REAL DEFAULT 0.0
         )
     """)
     
+    # Check and add columns if they don't exist
     cursor.execute("PRAGMA table_info(employees)")
     columns = [column[1] for column in cursor.fetchall()]
     if "department" not in columns:
         cursor.execute("ALTER TABLE employees ADD COLUMN department TEXT")
     if "designation" not in columns:
         cursor.execute("ALTER TABLE employees ADD COLUMN designation TEXT")
+    if "salary" not in columns:
+        cursor.execute("ALTER TABLE employees ADD COLUMN salary REAL DEFAULT 0.0")
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS leave_requests (
@@ -272,8 +276,26 @@ def get_emp_leave_summary(emp_id):
     }
 
 # ==============================================================================
-# 3. DIALOGS (VIEW & EDIT)
+# 3. DIALOGS (VIEW, EDIT & UPDATE SALARY)
 # ==============================================================================
+@st.dialog("💵 Update Employee Salary", width="small")
+def update_salary_dialog(emp_data):
+    st.write(f"**Employee:** {emp_data['emp_name']} (`{emp_data['emp_id']}`)")
+    st.write(f"**Department:** {emp_data['department'] or 'N/A'}")
+    st.write(f"**Designation:** {emp_data['designation'] or 'N/A'}")
+    st.markdown("---")
+    
+    current_sal = float(emp_data['salary']) if emp_data['salary'] else 0.0
+    new_sal = st.number_input("Enter New Monthly Salary (₹)", value=current_sal, min_value=0.0, step=1000.0, format="%.2f")
+    
+    if st.button("💾 Save Salary Update", type="primary", use_container_width=True):
+        conn = get_db_connection()
+        conn.cursor().execute("UPDATE employees SET salary=? WHERE emp_id=?", (new_sal, emp_data['emp_id']))
+        conn.commit()
+        conn.close()
+        st.toast("Salary updated successfully!")
+        st.rerun()
+
 @st.dialog("👁️ View Employee Details", width="large")
 def view_employee_dialog(emp_data):
     st.markdown(f"### **{emp_data['emp_name']}** (`{emp_data['emp_id']}`)")
@@ -282,9 +304,10 @@ def view_employee_dialog(emp_data):
     
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**📌 Job Details**")
+        st.markdown("**📌 Job & Salary Details**")
         st.write(f"- **Department:** {emp_data['department'] or 'N/A'}")
         st.write(f"- **Designation:** {emp_data['designation'] or 'N/A'}")
+        st.write(f"- **Monthly Salary:** ₹{float(emp_data['salary'] or 0.0):,.2f}")
         st.write(f"- **Date of Joining (DOJ):** {emp_data['doj'] or 'N/A'}")
         st.write(f"- **Date of Exit (DOE):** {emp_data['doe'] or 'N/A'}")
 
@@ -354,22 +377,23 @@ def edit_employee_dialog(emp_data):
             e_mobile = c5.text_input("Mobile Number", value=emp_data['mobile'])
             e_location = c6.text_input("Location", value=emp_data['location'])
 
-            c7, c8 = st.columns(2)
+            c7, c8, c9 = st.columns(3)
             e_pemail = c7.text_input("Personal Email", value=emp_data['personal_email'])
             e_oemail = c8.text_input("Office Email", value=emp_data['office_email'])
+            e_salary = c9.number_input("Monthly Salary (₹)", value=float(emp_data['salary'] or 0.0), step=1000.0)
 
             st.markdown("##### 🆔 Identity & Emergency Contact")
-            c9, c10, c11, c12 = st.columns(4)
-            e_aadhar = c9.text_input("Aadhar Number", value=emp_data['aadhar'])
-            e_pan = c10.text_input("PAN Number", value=emp_data['pan'])
-            e_emg_name = c11.text_input("Emergency Contact Person", value=emp_data['emergency_name'])
-            e_emg_contact = c12.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
+            c10, c11, c12, c13 = st.columns(4)
+            e_aadhar = c10.text_input("Aadhar Number", value=emp_data['aadhar'])
+            e_pan = c11.text_input("PAN Number", value=emp_data['pan'])
+            e_emg_name = c12.text_input("Emergency Contact Person", value=emp_data['emergency_name'])
+            e_emg_contact = c13.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
 
             st.markdown("##### 📅 Employment Dates")
-            c13, c14, c15 = st.columns(3)
-            e_dob = c13.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
-            e_doj = c14.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
-            e_doe_str = c15.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
+            c14, c15, c16 = st.columns(3)
+            e_dob = c14.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
+            e_doj = c15.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
+            e_doe_str = c16.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
 
             st.markdown("##### 💻 Asset & Inventory Management")
             existing_inv_str = emp_data['inventory_details'] if emp_data['inventory_details'] else ""
@@ -393,11 +417,11 @@ def edit_employee_dialog(emp_data):
                 conn.cursor().execute("""
                     UPDATE employees 
                     SET emp_name=?, department=?, designation=?, status=?, mobile=?, personal_email=?, office_email=?, location=?,
-                        aadhar=?, pan=?, emergency_name=?, emergency_contact=?, dob=?, doj=?, doe=?, inventory_details=?
+                        aadhar=?, pan=?, emergency_name=?, emergency_contact=?, dob=?, doj=?, doe=?, inventory_details=?, salary=?
                     WHERE emp_id=?
                 """, (
                     e_name, e_dept, e_desig, e_status, e_mobile, e_pemail, e_oemail, e_location,
-                    e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, final_inv_str,
+                    e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, final_inv_str, e_salary,
                     emp_data['emp_id']
                 ))
                 conn.commit()
@@ -492,7 +516,7 @@ st.sidebar.markdown("""
 
 main_menu = st.sidebar.radio(
     "NAVIGATION",
-    ["📊 Dashboard", "➕ Add Employee", "👥 Employee Master", "🍃 Leave Tracker", "📑 Leave Management"],
+    ["📊 Dashboard", "➕ Add Employee", "👥 Employee Master", "🍃 Leave Tracker", "📑 Leave Management", "💵 Salary Management"],
     label_visibility="collapsed"
 )
 
@@ -542,9 +566,10 @@ elif main_menu == "➕ Add Employee":
         designation = c5.text_input("Designation", placeholder="e.g. Software Engineer")
         location = c6.text_input("Work Location", value="Gurgaon")
 
-        c7, c8 = st.columns(2)
+        c7, c8, c9 = st.columns(3)
         personal_email = c7.text_input("Personal Email")
         office_email = c8.text_input("Office Email")
+        salary = c9.number_input("Monthly Basic Salary (₹)", min_value=0.0, step=1000.0, placeholder="e.g. 35000")
 
         st.subheader("2. Identity & Emergency Details")
         i1, i2, i3, i4 = st.columns(4)
@@ -597,11 +622,11 @@ elif main_menu == "➕ Add Employee":
                     cursor.execute("""
                         INSERT INTO employees 
                         (emp_id, emp_name, department, designation, status, mobile, personal_email, office_email, aadhar, pan, 
-                         emergency_name, emergency_contact, location, doj, dob, doe, inventory_details, documents_uploaded)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         emergency_name, emergency_contact, location, doj, dob, doe, inventory_details, documents_uploaded, salary)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         emp_id, emp_name, department, designation, emp_status, mobile, personal_email, office_email, aadhar, pan,
-                        emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), final_inv, docs_str
+                        emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), final_inv, docs_str, salary
                     ))
                     
                     cursor.execute("""
@@ -636,7 +661,6 @@ elif main_menu == "👥 Employee Master":
                 df_all['designation'].str.contains(search, case=False, na=False)
             ]
 
-        # Column ratios updated: Removed 'Status', Added 'Department' & 'Designation'
         col_ratios = [1.0, 1.3, 1.2, 1.3, 1.0, 1.3, 0.9, 1.0, 1.3, 1.8]
         
         th_cols = st.columns(col_ratios)
@@ -820,3 +844,44 @@ elif main_menu == "📑 Leave Management":
                     conn.close()
                     st.toast("Deleted!")
                     st.rerun()
+
+elif main_menu == "💵 Salary Management":
+    st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Salary Details</h2>", unsafe_allow_html=True)
+    
+    conn = get_db_connection()
+    df_sal = pd.read_sql_query("SELECT emp_id, emp_name, department, designation, salary FROM employees", conn)
+    conn.close()
+    
+    if len(df_sal) == 0:
+        st.info("Abhi koi employee record nahi hai.")
+    else:
+        # Search Filter
+        sal_search = st.text_input("🔍 Search Salary Records:", "", placeholder="Type Name, Emp Code, Department or Designation...")
+        if sal_search:
+            df_sal = df_sal[
+                df_sal['emp_name'].str.contains(sal_search, case=False, na=False) |
+                df_sal['emp_id'].str.contains(sal_search, case=False, na=False) |
+                df_sal['department'].str.contains(sal_search, case=False, na=False) |
+                df_sal['designation'].str.contains(sal_search, case=False, na=False)
+            ]
+
+        # Table Column Headers
+        sal_col_ratios = [1.2, 2.0, 1.8, 1.8, 1.5, 1.5]
+        th_cols = st.columns(sal_col_ratios)
+        headers = ["Emp Code", "Name", "Department", "Designation", "Monthly Salary (₹)", "Action"]
+        for idx, head in enumerate(headers):
+            th_cols[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
+        
+        # Table Rows Data
+        for idx, row in df_sal.iterrows():
+            tr_cols = st.columns(sal_col_ratios)
+            tr_cols[0].markdown(f"<div class='admin-table-row'><b>{row['emp_id']}</b></div>", unsafe_allow_html=True)
+            tr_cols[1].markdown(f"<div class='admin-table-row'>{row['emp_name']}</div>", unsafe_allow_html=True)
+            tr_cols[2].markdown(f"<div class='admin-table-row'>{row['department'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[3].markdown(f"<div class='admin-table-row'>{row['designation'] or '-'}</div>", unsafe_allow_html=True)
+            
+            sal_val = float(row['salary']) if row['salary'] else 0.0
+            tr_cols[4].markdown(f"<div class='admin-table-row'><b style='color:#28a745;'>₹{sal_val:,.2f}</b></div>", unsafe_allow_html=True)
+            
+            if tr_cols[5].button("✏️ Update Salary", key=f"sal_{row['emp_id']}"):
+                update_salary_dialog(row)
