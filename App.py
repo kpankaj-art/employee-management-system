@@ -176,15 +176,19 @@ def init_db():
         )
     """)
     
+    # Table schema with updated defaults (CL=3, SL=3, PL=1, Paid Leave=1)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS leave_balances (
             emp_id TEXT PRIMARY KEY,
-            cl INTEGER DEFAULT 12,
-            sl INTEGER DEFAULT 12,
-            pl INTEGER DEFAULT 15,
-            paid_leave INTEGER DEFAULT 5
+            cl INTEGER DEFAULT 3,
+            sl INTEGER DEFAULT 3,
+            pl INTEGER DEFAULT 1,
+            paid_leave INTEGER DEFAULT 1
         )
     """)
+    
+    # Update existing database entries to CL=3, SL=3, PL=1, SPL=1
+    cursor.execute("UPDATE leave_balances SET cl=3, sl=3, pl=1, paid_leave=1 WHERE cl=12")
     
     conn.commit()
     conn.close()
@@ -209,21 +213,16 @@ def display_pdf_preview(file_path):
 def get_emp_leave_summary(emp_id):
     conn = get_db_connection()
     
-    # Initial Assigned Balance
     bal = pd.read_sql_query("SELECT * FROM leave_balances WHERE emp_id=?", conn, params=(emp_id,))
     if len(bal) == 0:
-        # Default fallback if not created
-        total_cl, total_sl, total_pl, total_spl = 12, 12, 15, 5
+        total_cl, total_sl, total_pl, total_spl = 3, 3, 1, 1
     else:
         total_cl = bal.iloc[0]['cl']
         total_sl = bal.iloc[0]['sl']
         total_pl = bal.iloc[0]['pl']
         total_spl = bal.iloc[0]['paid_leave']
 
-    # Fetch Approved leaves taken by employee
     approved_df = pd.read_sql_query("SELECT leave_type, from_date, to_date FROM leave_requests WHERE emp_id=? AND status='Approved'", conn, params=(emp_id,))
-    
-    # Fetch Pending leaves count
     pending_df = pd.read_sql_query("SELECT COUNT(*) as p_count FROM leave_requests WHERE emp_id=? AND status='Pending'", conn, params=(emp_id,))
     conn.close()
 
@@ -252,7 +251,7 @@ def get_emp_leave_summary(emp_id):
         "sl_rem": max(0, total_sl - used_sl),
         "pl_rem": max(0, total_pl - used_pl),
         "spl_rem": max(0, total_spl - used_spl),
-        "cl_tot": total_cl, "sl_tot": total_sl, "pl_tot": total_pl,
+        "cl_tot": total_cl, "sl_tot": total_sl, "pl_tot": total_pl, "spl_tot": total_spl,
         "pending_count": pending_df.iloc[0]['p_count'] if len(pending_df) > 0 else 0
     }
 
@@ -519,7 +518,7 @@ elif main_menu == "➕ Add Employee":
                     
                     cursor.execute("""
                         INSERT OR REPLACE INTO leave_balances (emp_id, cl, sl, pl, paid_leave)
-                        VALUES (?, 12, 12, 15, 5)
+                        VALUES (?, 3, 3, 1, 1)
                     """, (emp_id,))
 
                     conn.commit()
@@ -599,12 +598,11 @@ elif main_menu == "🍃 Leave Tracker":
         except:
             days_completed = 100
 
-        # Calculate exact remaining leave balances
         summary = get_emp_leave_summary(selected_emp['emp_id'])
 
         st.markdown(f"""
         <div style="background-color: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            <h5 style="margin-0; color:#333; font-weight:600;">📊 Live Leave Balance for {selected_emp['emp_name']} ({selected_emp['emp_id']})</h5>
+            <h5 style="margin:0; color:#333; font-weight:600;">📊 Live Leave Balance for {selected_emp['emp_name']} ({selected_emp['emp_id']})</h5>
             <hr style="margin: 8px 0 12px 0;">
             <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                 <div>🟢 Casual Leave (CL): <b style="color:#28a745; font-size:16px;">{summary['cl_rem']}</b> / {summary['cl_tot']} Left</div>
@@ -680,8 +678,6 @@ elif main_menu == "📑 Leave Management":
     else:
         for idx, row in df_requests.iterrows():
             status_color = "#f39c12" if row['status'] == 'Pending' else ("#28a745" if row['status'] == 'Approved' else "#dc3545")
-            
-            # Fetch employee's remaining leaves
             emp_summary = get_emp_leave_summary(row['emp_id'])
             
             with st.expander(f"👤 {row['emp_name'] or 'Unknown'} ({row['emp_id']}) — {row['leave_type']} [{row['status']}]", expanded=(row['status'] == 'Pending')):
@@ -697,9 +693,9 @@ elif main_menu == "📑 Leave Management":
                     st.markdown(f"""
                     <div style="background-color:#f8f9fa; padding:8px 12px; border-radius:4px; border-left:3px solid #17a2b8; font-size:12px;">
                         <b>💰 Current Leave Balance:</b><br>
-                        • CL Remaining: <b>{emp_summary['cl_rem']}</b><br>
-                        • SL Remaining: <b>{emp_summary['sl_rem']}</b><br>
-                        • PL Remaining: <b>{emp_summary['pl_rem']}</b>
+                        • CL Remaining: <b>{emp_summary['cl_rem']} / {emp_summary['cl_tot']}</b><br>
+                        • SL Remaining: <b>{emp_summary['sl_rem']} / {emp_summary['sl_tot']}</b><br>
+                        • PL Remaining: <b>{emp_summary['pl_rem']} / {emp_summary['pl_tot']}</b>
                     </div>
                     """, unsafe_allow_html=True)
 
