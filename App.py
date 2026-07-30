@@ -189,41 +189,92 @@ def init_db():
 
 init_db()
 
-# Dialog / Modal Function for Editing Employee
-@st.dialog("✏️ Edit Employee Details")
-def edit_employee_dialog(emp_data):
-    st.write(f"Editing record for: **{emp_data['emp_id']} - {emp_data['emp_name']}**")
-    with st.form("edit_modal_form"):
-        c1, c2 = st.columns(2)
-        e_name = c1.text_input("Name", value=emp_data['emp_name'])
-        e_status = c2.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
-        
-        c3, c4 = st.columns(2)
-        e_mobile = c3.text_input("Mobile", value=emp_data['mobile'])
-        e_location = c4.text_input("Location", value=emp_data['location'])
-        
-        c5, c6 = st.columns(2)
-        e_pemail = c5.text_input("Personal Email", value=emp_data['personal_email'])
-        e_oemail = c6.text_input("Office Email", value=emp_data['office_email'])
-        
-        c7, c8 = st.columns(2)
-        e_aadhar = c7.text_input("Aadhar", value=emp_data['aadhar'])
-        e_pan = c8.text_input("PAN", value=emp_data['pan'])
-        
-        e_inventory = st.text_input("Inventory Details", value=emp_data['inventory_details'])
+# Helper function to parse dates safely
+def parse_date_safe(date_str, fallback=date.today()):
+    if not date_str or date_str == 'None' or date_str == '':
+        return fallback
+    try:
+        return datetime.strptime(str(date_str), "%Y-%m-%d").date()
+    except:
+        return fallback
 
-        save_btn = st.form_submit_button("Save Changes", type="primary")
-        if save_btn:
-            conn = get_db_connection()
-            conn.cursor().execute("""
-                UPDATE employees 
-                SET emp_name=?, status=?, mobile=?, location=?, personal_email=?, office_email=?, aadhar=?, pan=?, inventory_details=?
-                WHERE emp_id=?
-            """, (e_name, e_status, e_mobile, e_location, e_pemail, e_oemail, e_aadhar, e_pan, e_inventory, emp_data['emp_id']))
-            conn.commit()
-            conn.close()
-            st.success("Details updated successfully!")
-            st.rerun()
+# Dialog / Modal Function for Editing Employee & Viewing Documents
+@st.dialog("✏️ Manage Employee Record", width="large")
+def edit_employee_dialog(emp_data):
+    st.write(f"Managing Record for ID: **{emp_data['emp_id']}**")
+    
+    tab_edit, tab_docs = st.tabs(["✏️ Edit All Details", "📂 View / Download Documents"])
+
+    # Tab 1: Edit ALL Employee Details
+    with tab_edit:
+        with st.form("edit_modal_form"):
+            st.caption("Basic Information")
+            c1, c2, c3 = st.columns(3)
+            e_name = c1.text_input("Name *", value=emp_data['emp_name'])
+            e_status = c2.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
+            e_mobile = c3.text_input("Mobile Number", value=emp_data['mobile'])
+            
+            c4, c5, c6 = st.columns(3)
+            e_pemail = c4.text_input("Personal Email", value=emp_data['personal_email'])
+            e_oemail = c5.text_input("Office Email", value=emp_data['office_email'])
+            e_location = c6.text_input("Location", value=emp_data['location'])
+
+            st.caption("Identity & Emergency Details")
+            c7, c8, c9, c10 = st.columns(4)
+            e_aadhar = c7.text_input("Aadhar Number", value=emp_data['aadhar'])
+            e_pan = c8.text_input("PAN Number", value=emp_data['pan'])
+            e_emg_name = c9.text_input("Emergency Contact Name", value=emp_data['emergency_name'])
+            e_emg_contact = c10.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
+
+            st.caption("Dates & Inventory")
+            c11, c12, c13 = st.columns(3)
+            e_dob = c11.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
+            e_doj = c12.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
+            e_doe_str = c13.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
+
+            e_inventory = st.text_input("Inventory / Asset Details", value=emp_data['inventory_details'])
+
+            save_btn = st.form_submit_button("Update All Details", type="primary")
+            if save_btn:
+                conn = get_db_connection()
+                conn.cursor().execute("""
+                    UPDATE employees 
+                    SET emp_name=?, status=?, mobile=?, personal_email=?, office_email=?, location=?,
+                        aadhar=?, pan=?, emergency_name=?, emergency_contact=?, dob=?, doj=?, doe=?, inventory_details=?
+                    WHERE emp_id=?
+                """, (
+                    e_name, e_status, e_mobile, e_pemail, e_oemail, e_location,
+                    e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, e_inventory,
+                    emp_data['emp_id']
+                ))
+                conn.commit()
+                conn.close()
+                st.success("Sari details update ho gayi hain!")
+                st.rerun()
+
+    # Tab 2: View and Download Uploaded Documents
+    with tab_docs:
+        docs_raw = emp_data['documents_uploaded']
+        try:
+            docs = json.loads(docs_raw) if docs_raw else []
+        except:
+            docs = []
+
+        if not docs:
+            st.warning("⚠️ Is employee ke koi documents upload nahi hain.")
+        else:
+            st.success(f"📁 Total {len(docs)} document(s) uploaded:")
+            for idx, doc in enumerate(docs):
+                dc1, dc2, dc3 = st.columns([2, 3, 2])
+                dc1.write(f"**Type:** {doc.get('type', 'Document')}")
+                dc2.write(f"**File:** {doc.get('filename', '')}")
+                
+                file_path = doc.get('path', '')
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        dc3.download_button("⬇️ Download", data=f, file_name=doc['filename'], key=f"dl_doc_{emp_data['emp_id']}_{idx}")
+                else:
+                    dc3.caption("File link missing")
 
 # ==============================================================================
 # 3. SIDEBAR NAVIGATION
@@ -419,7 +470,7 @@ elif main_menu == "👥 Employee Master":
             
             # Action Buttons Column (Edit & Delete)
             btn_col1, btn_col2 = r_cols[0].columns(2)
-            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record"):
+            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & View Documents"):
                 edit_employee_dialog(row)
             
             if btn_col2.button("🗑️", key=f"del_{row['emp_id']}", help="Delete Record"):
