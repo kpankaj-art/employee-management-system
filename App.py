@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling (AdminLTE Theme + Custom Enhanced Sidebar)
+# Custom Styling (AdminLTE Theme + High Contrast Readable Sidebar)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
@@ -37,9 +37,9 @@ st.markdown("""
         background-color: #00a65a;
         color: #ffffff !important;
         text-align: center;
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 700;
-        padding: 15px 10px;
+        padding: 16px 10px;
         margin-top: -15px;
         border-bottom: 2px solid #008d4c;
         letter-spacing: 1px;
@@ -55,20 +55,33 @@ st.markdown("""
         gap: 12px;
     }
 
-    /* Bada Radio Navigation Text & Spacing */
+    /* HIGH VISIBILITY RADIO BUTTONS & MENU TEXT */
     [data-testid="stSidebar"] div[class*="stRadio"] label {
         font-size: 16px !important;
         font-weight: 600 !important;
         padding: 10px 12px !important;
-        color: #c2c7d0 !important;
+        color: #ffffff !important; /* Pure White text for high visibility */
         border-radius: 6px !important;
         transition: all 0.3s ease !important;
         margin-bottom: 4px !important;
+        opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] div[class*="stRadio"] label p {
+        color: #ffffff !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Selected Item Highlight */
+    [data-testid="stSidebar"] div[class*="stRadio"] label[aria-checked="true"] p {
+        color: #00e676 !important; /* Bright Neon Green for active tab */
+        font-weight: 700 !important;
     }
 
     [data-testid="stSidebar"] div[class*="stRadio"] label:hover {
         background-color: #2c3b41 !important;
-        color: #ffffff !important;
+        color: #00e676 !important;
     }
 
     /* Sidebar Extra Widgets */
@@ -78,7 +91,7 @@ st.markdown("""
         padding: 12px 15px;
         margin-top: 20px;
         border-left: 4px solid #00a65a;
-        color: #b8c7ce;
+        color: #ffffff;
     }
     .sidebar-widget-title {
         font-size: 12px;
@@ -93,6 +106,7 @@ st.markdown("""
         font-size: 14px;
         padding: 4px 0;
         border-bottom: 1px solid #2c3b41;
+        color: #ffffff;
     }
     .sidebar-stat-item:last-child {
         border-bottom: none;
@@ -337,7 +351,6 @@ def get_emp_leave_summary(emp_id):
         "pending_count": pending_df.iloc[0]['p_count'] if len(pending_df) > 0 else 0
     }
 
-# Quick stats helper for sidebar
 def get_quick_stats():
     conn = get_db_connection()
     act = conn.execute("SELECT COUNT(*) FROM employees WHERE status='Active'").fetchone()[0]
@@ -346,7 +359,7 @@ def get_quick_stats():
     return act, pend
 
 # ==============================================================================
-# 3. DIALOGS (VIEW, EDIT, SALARY & SALARY HISTORY)
+# 3. DIALOGS
 # ==============================================================================
 @st.dialog("💵 Update Employee Salary", width="small")
 def update_salary_dialog(emp_data):
@@ -630,7 +643,8 @@ def edit_employee_dialog(emp_data):
 # ==============================================================================
 # 4. ENHANCED SIDEBAR NAVIGATION & WIDGETS
 # ==============================================================================
-st.sidebar.markdown('<div class="sidebar-brand">💼 PAYROLL PORTAL</div>', unsafe_allow_html=True)
+# Renamed title to "HUMAN RESOURCES"
+st.sidebar.markdown('<div class="sidebar-brand">👥 HUMAN RESOURCES</div>', unsafe_allow_html=True)
 
 # User Profile Header
 st.sidebar.markdown("""
@@ -640,21 +654,21 @@ st.sidebar.markdown("""
         </div>
         <div>
             <div style="color:#ffffff; font-weight:600; font-size:15px; margin-bottom: 2px;">Welcome Admin</div>
-            <div style="color:#00a65a; font-size:12px; font-weight: bold;">● System Online</div>
+            <div style="color:#00e676; font-size:12px; font-weight: bold;">● System Online</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-# Main Navigation Menu with Icons
+# Main Navigation Menu with High Contrast Readable Icons & Text
 main_menu = st.sidebar.radio(
     "MAIN NAVIGATION",
     [
-        "📊  Dashboard", 
-        "➕  Add Employee", 
-        "👥  Employee Master", 
-        "🍃  Leave Tracker", 
-        "📑  Leave Management", 
-        "💵  Salary Management"
+        "📊 Dashboard", 
+        "➕ Add Employee", 
+        "👥 Employee Master", 
+        "🍃 Leave Tracker", 
+        "📑 Leave Management", 
+        "💵 Salary Management"
     ],
     label_visibility="collapsed"
 )
@@ -668,11 +682,11 @@ st.sidebar.markdown(f"""
         <div class="sidebar-widget-title">⚡ Quick System Overview</div>
         <div class="sidebar-stat-item">
             <span>Active Staff:</span>
-            <b style="color:#00a65a;">{act_count}</b>
+            <b style="color:#00e676;">{act_count}</b>
         </div>
         <div class="sidebar-stat-item">
             <span>Pending Leaves:</span>
-            <b style="color:#f39c12;">{pend_count}</b>
+            <b style="color:#ffb74d;">{pend_count}</b>
         </div>
     </div>
 """, unsafe_allow_html=True)
