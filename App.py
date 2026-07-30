@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import json
 import os
+import base64
 from datetime import datetime, date
 
 # ==============================================================================
@@ -201,14 +202,21 @@ def parse_date_safe(date_str, fallback=date.today()):
     except:
         return fallback
 
+# PDF Viewer Helper
+def display_pdf_preview(file_path):
+    with open(file_path, "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450" type="application/pdf" style="border: 1px solid #ddd; border-radius: 5px;"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
+
 # ==============================================================================
-# EDIT & DOCUMENT MODAL DIALOG
+# EDIT & DOCUMENT MODAL DIALOG WITH PREVIEW
 # ==============================================================================
 @st.dialog("⚙️ Manage Employee Profile", width="large")
 def edit_employee_dialog(emp_data):
     st.caption(f"Employee ID: **{emp_data['emp_id']}** | Name: **{emp_data['emp_name']}**")
     
-    tab_edit, tab_docs = st.tabs(["✏️ Edit Profile & Assets", "📂 Manage & Upload Documents"])
+    tab_edit, tab_docs = st.tabs(["✏️ Edit Profile & Assets", "📂 View & Manage Documents"])
 
     # ------------------ TAB 1: EDIT PROFILE & INVENTORY ------------------
     with tab_edit:
@@ -238,7 +246,6 @@ def edit_employee_dialog(emp_data):
             e_doe_str = c13.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
 
             st.markdown("##### 💻 Asset & Inventory Management")
-            # Parsing existing inventory string into multiselect defaults
             existing_inv_str = emp_data['inventory_details'] if emp_data['inventory_details'] else ""
             existing_items = [i.strip() for i in existing_inv_str.split(",") if i.strip()]
             
@@ -251,7 +258,6 @@ def edit_employee_dialog(emp_data):
             save_btn = st.form_submit_button("💾 Save All Changes", type="primary")
             
             if save_btn:
-                # Combine selected multiselect + custom text inputs
                 all_inv = selected_assets.copy()
                 if other_assets.strip():
                     all_inv.append(other_assets.strip())
@@ -273,23 +279,60 @@ def edit_employee_dialog(emp_data):
                 st.success("Sari details aur inventory update ho gayi!")
                 st.rerun()
 
-    # ------------------ TAB 2: DOCUMENTS UPLOAD & VIEW ------------------
-    with tab_edit:
-        pass  # standard fallback
-
+    # ------------------ TAB 2: PREVIEW, DOWNLOAD & UPLOAD DOCUMENTS ------------------
     with tab_docs:
-        # Load Existing Docs
         docs_raw = emp_data['documents_uploaded']
         try:
             current_docs = json.loads(docs_raw) if docs_raw else []
         except:
             current_docs = []
 
+        st.markdown("##### 👁️ Uploaded Documents (Preview & Download)")
+
+        if not current_docs:
+            st.info("Abhi is employee ke koi documents uploaded nahi hain.")
+        else:
+            for idx, doc in enumerate(current_docs):
+                file_path = doc.get('path', '')
+                file_name = doc.get('filename', 'file')
+                doc_type = doc.get('type', 'Document')
+                
+                with st.expander(f"📄 {doc_type} - {file_name}", expanded=(idx == 0)):
+                    if os.path.exists(file_path):
+                        ext = os.path.splitext(file_name)[1].lower()
+                        
+                        # Preview logic based on extension
+                        st.markdown("**Preview:**")
+                        if ext in ['.png', '.jpg', '.jpeg']:
+                            st.image(file_path, caption=file_name, use_column_width=True)
+                        elif ext == '.pdf':
+                            display_pdf_preview(file_path)
+                        else:
+                            st.caption(f"📁 Preview not supported for {ext} files. Please download to view.")
+                        
+                        st.write("")
+                        # Download & Delete Action Buttons
+                        btn_c1, btn_c2 = st.columns([1, 4])
+                        with open(file_path, "rb") as f:
+                            btn_c1.download_button("⬇️ Download File", data=f, file_name=file_name, key=f"preview_dl_{emp_data['emp_id']}_{idx}", type="primary")
+                        
+                        if btn_c2.button("🗑️ Remove Document", key=f"del_doc_{emp_data['emp_id']}_{idx}"):
+                            current_docs.pop(idx)
+                            conn = get_db_connection()
+                            conn.cursor().execute("UPDATE employees SET documents_uploaded=? WHERE emp_id=?", (json.dumps(current_docs), emp_data['emp_id']))
+                            conn.commit()
+                            conn.close()
+                            st.toast("Document removed!")
+                            st.rerun()
+                    else:
+                        st.error("⚠️ File missing on server system!")
+
+        st.markdown("---")
         st.markdown("##### 📤 Upload New Document")
         with st.form("modal_upload_form"):
             uc1, uc2 = st.columns([1, 2])
             new_doc_type = uc1.selectbox("Document Category", ["Aadhar Card", "PAN Card", "Offer Letter", "Relieving Letter", "Markssheet", "Resume", "Other"])
-            new_file = uc2.file_uploader("Choose File", type=['pdf', 'png', 'jpg', 'jpeg', 'docx'])
+            new_file = uc2.file_uploader("Choose File (PDF, PNG, JPG supported for preview)", type=['pdf', 'png', 'jpg', 'jpeg', 'docx'])
             
             upload_submit = st.form_submit_button("⬆️ Upload Document")
             
@@ -299,7 +342,6 @@ def edit_employee_dialog(emp_data):
                     with open(file_path, "wb") as buffer:
                         buffer.write(new_file.getbuffer())
                     
-                    # Append new doc metadata
                     current_docs.append({
                         "type": new_doc_type,
                         "filename": new_file.name,
@@ -315,35 +357,6 @@ def edit_employee_dialog(emp_data):
                     st.rerun()
                 else:
                     st.error("Pehle file choose karein!")
-
-        st.markdown("---")
-        st.markdown("##### 📁 Existing Documents")
-
-        if not current_docs:
-            st.info("Abhi koi document uploaded nahi hai.")
-        else:
-            for idx, doc in enumerate(current_docs):
-                dc1, dc2, dc3, dc4 = st.columns([2, 3, 1.5, 1])
-                dc1.write(f"📄 **{doc.get('type', 'Document')}**")
-                dc2.caption(doc.get('filename', ''))
-                
-                # Download Button
-                file_path = doc.get('path', '')
-                if os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        dc3.download_button("⬇️ Download", data=f, file_name=doc['filename'], key=f"modal_dl_{emp_data['emp_id']}_{idx}")
-                else:
-                    dc3.caption("File Missing")
-                
-                # Delete Document Button
-                if dc4.button("🗑️", key=f"del_doc_{emp_data['emp_id']}_{idx}", help="Delete Document"):
-                    current_docs.pop(idx)
-                    conn = get_db_connection()
-                    conn.cursor().execute("UPDATE employees SET documents_uploaded=? WHERE emp_id=?", (json.dumps(current_docs), emp_data['emp_id']))
-                    conn.commit()
-                    conn.close()
-                    st.toast("Document deleted!")
-                    st.rerun()
 
 # ==============================================================================
 # 3. SIDEBAR NAVIGATION
@@ -466,13 +479,11 @@ elif main_menu == "➕ Add Employee":
             if not emp_id or not emp_name:
                 st.error("Employee ID aur Name mandatory hai!")
             else:
-                # Combine Inventory
                 inv_list = selected_assets.copy()
                 if custom_asset.strip():
                     inv_list.append(custom_asset.strip())
                 final_inv = ", ".join(inv_list)
 
-                # Save Uploaded Files
                 saved_docs = []
                 if uploaded_files:
                     for f in uploaded_files:
@@ -547,7 +558,7 @@ elif main_menu == "👥 Employee Master":
             
             # Action Buttons Column
             btn_col1, btn_col2 = r_cols[0].columns(2)
-            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & Manage Documents"):
+            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & View Documents"):
                 edit_employee_dialog(row)
             
             if btn_col2.button("🗑️", key=f"del_{row['emp_id']}", help="Delete Record"):
