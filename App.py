@@ -10,7 +10,7 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="HR Management System",
+    page_title="HR & Payroll Management System",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -61,7 +61,7 @@ st.markdown("""
         color: #333333;
         border-bottom: 2px solid #dee2e6;
         padding: 10px 5px;
-        font-size: 14px;
+        font-size: 13px;
     }
     
     .admin-table-row {
@@ -72,12 +72,22 @@ st.markdown("""
         color: #495057;
     }
 
+    div.stButton > button[key^="view_"] {
+        background-color: #17a2b8 !important;
+        color: white !important;
+        border: none !important;
+        padding: 4px 6px !important;
+        font-size: 11px !important;
+        border-radius: 3px !important;
+        width: 100%;
+    }
+
     div.stButton > button[key^="edit_"] {
         background-color: #28a745 !important;
         color: white !important;
         border: none !important;
-        padding: 4px 10px !important;
-        font-size: 12px !important;
+        padding: 4px 6px !important;
+        font-size: 11px !important;
         border-radius: 3px !important;
         width: 100%;
     }
@@ -86,8 +96,8 @@ st.markdown("""
         background-color: #dc3545 !important;
         color: white !important;
         border: none !important;
-        padding: 4px 10px !important;
-        font-size: 12px !important;
+        padding: 4px 6px !important;
+        font-size: 11px !important;
         border-radius: 3px !important;
         width: 100%;
     }
@@ -117,7 +127,7 @@ st.markdown("""
 # Top Bar Header
 st.markdown("""
     <div class="top-navbar">
-        <div style="font-size: 18px; font-weight: 600;">HR Management System</div>
+        <div style="font-size: 18px; font-weight: 600;">HR & Payroll Management System</div>
         <div style="font-size: 14px; display: flex; align-items: center; gap: 8px;">
             <span style="background-color:#f39c12; padding:3px 8px; border-radius:50%; font-weight:bold; font-size:12px;">A</span>
             Welcome Admin
@@ -147,6 +157,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS employees (
             emp_id TEXT PRIMARY KEY,
             emp_name TEXT NOT NULL,
+            department TEXT,
+            designation TEXT,
             status TEXT DEFAULT 'Active',
             mobile TEXT,
             personal_email TEXT,
@@ -164,6 +176,13 @@ def init_db():
         )
     """)
     
+    cursor.execute("PRAGMA table_info(employees)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "department" not in columns:
+        cursor.execute("ALTER TABLE employees ADD COLUMN department TEXT")
+    if "designation" not in columns:
+        cursor.execute("ALTER TABLE employees ADD COLUMN designation TEXT")
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS leave_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,7 +195,6 @@ def init_db():
         )
     """)
     
-    # Table schema with updated defaults (CL=3, SL=3, PL=1, Paid Leave=1)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS leave_balances (
             emp_id TEXT PRIMARY KEY,
@@ -187,7 +205,6 @@ def init_db():
         )
     """)
     
-    # Update existing database entries to CL=3, SL=3, PL=1, SPL=1
     cursor.execute("UPDATE leave_balances SET cl=3, sl=3, pl=1, paid_leave=1 WHERE cl=12")
     
     conn.commit()
@@ -209,7 +226,6 @@ def display_pdf_preview(file_path):
     pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450" type="application/pdf" style="border: 1px solid #ddd; border-radius: 5px;"></iframe>'
     st.markdown(pdf_display, unsafe_allow_html=True)
 
-# Helper function to calculate detailed remaining leave balance
 def get_emp_leave_summary(emp_id):
     conn = get_db_connection()
     
@@ -256,9 +272,70 @@ def get_emp_leave_summary(emp_id):
     }
 
 # ==============================================================================
-# 3. EDIT DIALOG WITH PREVIEW & DOWNLOAD
+# 3. DIALOGS (VIEW & EDIT)
 # ==============================================================================
-@st.dialog("⚙️ Manage Employee Profile", width="large")
+@st.dialog("👁️ View Employee Details", width="large")
+def view_employee_dialog(emp_data):
+    st.markdown(f"### **{emp_data['emp_name']}** (`{emp_data['emp_id']}`)")
+    st.caption(f"Status: **{emp_data['status']}** | Location: **{emp_data['location'] or 'N/A'}**")
+    st.markdown("---")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**📌 Job Details**")
+        st.write(f"- **Department:** {emp_data['department'] or 'N/A'}")
+        st.write(f"- **Designation:** {emp_data['designation'] or 'N/A'}")
+        st.write(f"- **Date of Joining (DOJ):** {emp_data['doj'] or 'N/A'}")
+        st.write(f"- **Date of Exit (DOE):** {emp_data['doe'] or 'N/A'}")
+
+        st.markdown("<br>**📞 Contact Details**", unsafe_allow_html=True)
+        st.write(f"- **Mobile:** {emp_data['mobile'] or 'N/A'}")
+        st.write(f"- **Office Email:** {emp_data['office_email'] or 'N/A'}")
+        st.write(f"- **Personal Email:** {emp_data['personal_email'] or 'N/A'}")
+
+    with c2:
+        st.markdown("**🆔 Identity & Emergency**")
+        st.write(f"- **Date of Birth (DOB):** {emp_data['dob'] or 'N/A'}")
+        st.write(f"- **Aadhar Number:** {emp_data['aadhar'] or 'N/A'}")
+        st.write(f"- **PAN Number:** {emp_data['pan'] or 'N/A'}")
+        st.write(f"- **Emergency Contact:** {emp_data['emergency_name'] or 'N/A'} ({emp_data['emergency_contact'] or 'N/A'})")
+
+        st.markdown("<br>**💻 Inventory & Assets**", unsafe_allow_html=True)
+        st.write(f"- **Assigned Assets:** {emp_data['inventory_details'] or 'None'}")
+
+    st.markdown("---")
+    st.markdown("**📂 Uploaded Documents**")
+    
+    docs_raw = emp_data['documents_uploaded']
+    try:
+        current_docs = json.loads(docs_raw) if docs_raw else []
+    except:
+        current_docs = []
+
+    if not current_docs:
+        st.info("No documents uploaded for this employee.")
+    else:
+        for idx, doc in enumerate(current_docs):
+            file_path = doc.get('path', '')
+            file_name = doc.get('filename', 'file')
+            doc_type = doc.get('type', 'Document')
+            
+            with st.expander(f"📄 {doc_type} - {file_name}"):
+                if os.path.exists(file_path):
+                    ext = os.path.splitext(file_name)[1].lower()
+                    if ext in ['.png', '.jpg', '.jpeg']:
+                        st.image(file_path, caption=file_name, use_column_width=True)
+                    elif ext == '.pdf':
+                        display_pdf_preview(file_path)
+                    else:
+                        st.caption(f"📁 Preview not supported for {ext} files.")
+                    
+                    with open(file_path, "rb") as f:
+                        st.download_button("⬇️ Download File", data=f, file_name=file_name, key=f"view_dl_{emp_data['emp_id']}_{idx}")
+                else:
+                    st.error("File not found on server.")
+
+@st.dialog("⚙️ Edit Employee Profile", width="large")
 def edit_employee_dialog(emp_data):
     st.caption(f"Employee ID: **{emp_data['emp_id']}** | Name: **{emp_data['emp_name']}**")
     
@@ -266,29 +343,33 @@ def edit_employee_dialog(emp_data):
 
     with tab_edit:
         with st.form("edit_modal_form"):
-            st.markdown("##### 👤 Personal & Contact Info")
+            st.markdown("##### 👤 Personal & Professional Info")
             c1, c2, c3 = st.columns(3)
             e_name = c1.text_input("Name *", value=emp_data['emp_name'])
-            e_status = c2.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
-            e_mobile = c3.text_input("Mobile Number", value=emp_data['mobile'])
-            
+            e_dept = c2.text_input("Department", value=emp_data['department'] or '')
+            e_desig = c3.text_input("Designation", value=emp_data['designation'] or '')
+
             c4, c5, c6 = st.columns(3)
-            e_pemail = c4.text_input("Personal Email", value=emp_data['personal_email'])
-            e_oemail = c5.text_input("Office Email", value=emp_data['office_email'])
+            e_status = c4.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
+            e_mobile = c5.text_input("Mobile Number", value=emp_data['mobile'])
             e_location = c6.text_input("Location", value=emp_data['location'])
 
+            c7, c8 = st.columns(2)
+            e_pemail = c7.text_input("Personal Email", value=emp_data['personal_email'])
+            e_oemail = c8.text_input("Office Email", value=emp_data['office_email'])
+
             st.markdown("##### 🆔 Identity & Emergency Contact")
-            c7, c8, c9, c10 = st.columns(4)
-            e_aadhar = c7.text_input("Aadhar Number", value=emp_data['aadhar'])
-            e_pan = c8.text_input("PAN Number", value=emp_data['pan'])
-            e_emg_name = c9.text_input("Emergency Contact Person", value=emp_data['emergency_name'])
-            e_emg_contact = c10.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
+            c9, c10, c11, c12 = st.columns(4)
+            e_aadhar = c9.text_input("Aadhar Number", value=emp_data['aadhar'])
+            e_pan = c10.text_input("PAN Number", value=emp_data['pan'])
+            e_emg_name = c11.text_input("Emergency Contact Person", value=emp_data['emergency_name'])
+            e_emg_contact = c12.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
 
             st.markdown("##### 📅 Employment Dates")
-            c11, c12, c13 = st.columns(3)
-            e_dob = c11.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
-            e_doj = c12.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
-            e_doe_str = c13.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
+            c13, c14, c15 = st.columns(3)
+            e_dob = c13.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
+            e_doj = c14.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
+            e_doe_str = c15.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
 
             st.markdown("##### 💻 Asset & Inventory Management")
             existing_inv_str = emp_data['inventory_details'] if emp_data['inventory_details'] else ""
@@ -311,11 +392,11 @@ def edit_employee_dialog(emp_data):
                 conn = get_db_connection()
                 conn.cursor().execute("""
                     UPDATE employees 
-                    SET emp_name=?, status=?, mobile=?, personal_email=?, office_email=?, location=?,
+                    SET emp_name=?, department=?, designation=?, status=?, mobile=?, personal_email=?, office_email=?, location=?,
                         aadhar=?, pan=?, emergency_name=?, emergency_contact=?, dob=?, doj=?, doe=?, inventory_details=?
                     WHERE emp_id=?
                 """, (
-                    e_name, e_status, e_mobile, e_pemail, e_oemail, e_location,
+                    e_name, e_dept, e_desig, e_status, e_mobile, e_pemail, e_oemail, e_location,
                     e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, final_inv_str,
                     emp_data['emp_id']
                 ))
@@ -401,7 +482,7 @@ def edit_employee_dialog(emp_data):
 # ==============================================================================
 # 4. SIDEBAR NAVIGATION
 # ==============================================================================
-st.sidebar.markdown('<div class="sidebar-brand">HR</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-brand">Payroll</div>', unsafe_allow_html=True)
 st.sidebar.markdown("""
     <div class="sidebar-user">
         <div style="color:#fff; font-weight:600; font-size:14px;">Welcome Admin</div>
@@ -419,11 +500,10 @@ main_menu = st.sidebar.radio(
 # 5. PAGE ROUTING & LOGIC
 # ==============================================================================
 if main_menu == "📊 Dashboard":
-    st.markdown("<h2 style='color:#333; font-weight:800;'>HR Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:400;'>HR Dashboard</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
     df_emp = pd.read_sql_query("SELECT * FROM employees", conn)
-    df_leaves = pd.read_sql_query("SELECT * FROM leave_requests WHERE status='Pending'", conn)
     conn.close()
     
     total_emp = len(df_emp)
@@ -446,7 +526,11 @@ if main_menu == "📊 Dashboard":
 elif main_menu == "➕ Add Employee":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Add New Employee Details</h2>", unsafe_allow_html=True)
     
-    with st.form("add_emp_form"):
+    if "form_submitted_success" in st.session_state and st.session_state.form_submitted_success:
+        st.toast("🎉 Employee successfully added!", icon="✅")
+        st.session_state.form_submitted_success = False
+
+    with st.form("add_emp_form", clear_on_submit=True):
         st.subheader("1. Basic & Contact Details")
         c1, c2, c3 = st.columns(3)
         emp_id = c1.text_input("Employee ID *", placeholder="e.g. VMPL19")
@@ -454,9 +538,13 @@ elif main_menu == "➕ Add Employee":
         mobile = c3.text_input("Mobile Number", placeholder="10 Digit Number")
         
         c4, c5, c6 = st.columns(3)
-        personal_email = c4.text_input("Personal Email")
-        office_email = c5.text_input("Office Email")
+        department = c4.text_input("Department", placeholder="e.g. IT, HR, Sales")
+        designation = c5.text_input("Designation", placeholder="e.g. Software Engineer")
         location = c6.text_input("Work Location", value="Gurgaon")
+
+        c7, c8 = st.columns(2)
+        personal_email = c7.text_input("Personal Email")
+        office_email = c8.text_input("Office Email")
 
         st.subheader("2. Identity & Emergency Details")
         i1, i2, i3, i4 = st.columns(4)
@@ -508,11 +596,11 @@ elif main_menu == "➕ Add Employee":
                 try:
                     cursor.execute("""
                         INSERT INTO employees 
-                        (emp_id, emp_name, status, mobile, personal_email, office_email, aadhar, pan, 
+                        (emp_id, emp_name, department, designation, status, mobile, personal_email, office_email, aadhar, pan, 
                          emergency_name, emergency_contact, location, doj, dob, doe, inventory_details, documents_uploaded)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        emp_id, emp_name, emp_status, mobile, personal_email, office_email, aadhar, pan,
+                        emp_id, emp_name, department, designation, emp_status, mobile, personal_email, office_email, aadhar, pan,
                         emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), final_inv, docs_str
                     ))
                     
@@ -522,7 +610,8 @@ elif main_menu == "➕ Add Employee":
                     """, (emp_id,))
 
                     conn.commit()
-                    st.success(f"Employee {emp_name} ({emp_id}) saved!")
+                    st.session_state.form_submitted_success = True
+                    st.rerun()
                 except sqlite3.IntegrityError:
                     st.error("Employee ID pehle se registered hai!")
                 finally:
@@ -538,17 +627,20 @@ elif main_menu == "👥 Employee Master":
     if len(df_all) == 0:
         st.info("Abhi koi employee record nahi hai.")
     else:
-        search = st.text_input("🔍 Search Employee:", "", placeholder="Type name, ID or mobile...")
+        search = st.text_input("🔍 Search Employee:", "", placeholder="Type name, ID, department or mobile...")
         if search:
             df_all = df_all[
                 df_all['emp_name'].str.contains(search, case=False, na=False) |
-                df_all['emp_id'].str.contains(search, case=False, na=False)
+                df_all['emp_id'].str.contains(search, case=False, na=False) |
+                df_all['department'].str.contains(search, case=False, na=False) |
+                df_all['designation'].str.contains(search, case=False, na=False)
             ]
 
-        col_ratios = [1.1, 1.4, 0.8, 1.1, 1.6, 1.0, 1.0, 1.3, 1.8]
+        # Column ratios updated: Removed 'Status', Added 'Department' & 'Designation'
+        col_ratios = [1.0, 1.3, 1.2, 1.3, 1.0, 1.3, 0.9, 1.0, 1.3, 1.8]
         
         th_cols = st.columns(col_ratios)
-        headers = ["Emp ID", "Name", "Status", "Mobile", "Office Email", "DOJ", "Location", "Assets", "Tools / Actions"]
+        headers = ["Emp ID", "Name", "Department", "Designation", "Mobile", "Office Email", "DOJ", "Location", "Assets", "Tools / Actions"]
         for idx, head in enumerate(headers):
             th_cols[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
         
@@ -556,21 +648,23 @@ elif main_menu == "👥 Employee Master":
             tr_cols = st.columns(col_ratios)
             tr_cols[0].markdown(f"<div class='admin-table-row'><b>{row['emp_id']}</b></div>", unsafe_allow_html=True)
             tr_cols[1].markdown(f"<div class='admin-table-row'>{row['emp_name']}</div>", unsafe_allow_html=True)
+            tr_cols[2].markdown(f"<div class='admin-table-row'>{row['department'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[3].markdown(f"<div class='admin-table-row'>{row['designation'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[4].markdown(f"<div class='admin-table-row'>{row['mobile'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[5].markdown(f"<div class='admin-table-row'>{row['office_email'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[6].markdown(f"<div class='admin-table-row'>{row['doj'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[7].markdown(f"<div class='admin-table-row'>{row['location'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[8].markdown(f"<div class='admin-table-row'>{row['inventory_details'] or '-'}</div>", unsafe_allow_html=True)
             
-            status_color = "#28a745" if row['status'] == 'Active' else "#dc3545"
-            tr_cols[2].markdown(f"<div class='admin-table-row'><span style='color:{status_color}; font-weight:bold;'>● {row['status']}</span></div>", unsafe_allow_html=True)
+            act_col1, act_col2, act_col3 = tr_cols[9].columns(3)
             
-            tr_cols[3].markdown(f"<div class='admin-table-row'>{row['mobile'] or '-'}</div>", unsafe_allow_html=True)
-            tr_cols[4].markdown(f"<div class='admin-table-row'>{row['office_email'] or '-'}</div>", unsafe_allow_html=True)
-            tr_cols[5].markdown(f"<div class='admin-table-row'>{row['doj'] or '-'}</div>", unsafe_allow_html=True)
-            tr_cols[6].markdown(f"<div class='admin-table-row'>{row['location'] or '-'}</div>", unsafe_allow_html=True)
-            tr_cols[7].markdown(f"<div class='admin-table-row'>{row['inventory_details'] or '-'}</div>", unsafe_allow_html=True)
-            
-            act_col1, act_col2 = tr_cols[8].columns(2)
-            if act_col1.button("✏️ Edit", key=f"edit_{row['emp_id']}"):
+            if act_col1.button("👁️ View", key=f"view_{row['emp_id']}"):
+                view_employee_dialog(row)
+
+            if act_col2.button("✏️ Edit", key=f"edit_{row['emp_id']}"):
                 edit_employee_dialog(row)
             
-            if act_col2.button("🗑️ Delete", key=f"del_{row['emp_id']}"):
+            if act_col3.button("🗑️ Delete", key=f"del_{row['emp_id']}"):
                 conn = get_db_connection()
                 conn.cursor().execute("DELETE FROM employees WHERE emp_id=?", (row['emp_id'],))
                 conn.commit()
@@ -616,7 +710,7 @@ elif main_menu == "🍃 Leave Tracker":
         if days_completed < 90:
             st.error(f"⚠️ **Not Eligible:** Joining < 90 days. (Completed: {days_completed} days)")
         else:
-            with st.form("apply_leave_form"):
+            with st.form("apply_leave_form", clear_on_submit=True):
                 leave_type = st.selectbox("Leave Type", ["Casual Leave (CL)", "Sick Leave (SL)", "Paid Leave (PL)", "Special Paid Leave"])
                 c1, c2 = st.columns(2)
                 from_date = c1.date_input("From Date", value=date.today())
@@ -633,7 +727,7 @@ elif main_menu == "🍃 Leave Tracker":
                     """, (selected_emp['emp_id'], leave_type, str(from_date), str(to_date), reason))
                     conn.commit()
                     conn.close()
-                    st.success("Leave Request submitted!")
+                    st.toast("Leave Request submitted!")
                     st.rerun()
 
 elif main_menu == "📑 Leave Management":
