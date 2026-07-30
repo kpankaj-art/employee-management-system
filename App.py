@@ -15,14 +15,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# AdminLTE Original Style Setup
+# Custom Styling for AdminLTE theme
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Source Sans Pro', sans-serif !important;
-        background-color: #ecf0f5 !important;
+        background-color: #f4f6f9 !important;
     }
     
     footer {visibility: hidden;}
@@ -105,6 +105,11 @@ st.markdown("""
         color: #333;
         margin-top: 5px;
     }
+
+    /* Table Compact Styling */
+    div[data-testid="stColumn"] {
+        padding: 2px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -119,7 +124,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Document Storage Directory
+# Upload Directory Setup
 UPLOADS_DIR = "uploaded_documents"
 if not os.path.exists(UPLOADS_DIR):
     os.makedirs(UPLOADS_DIR)
@@ -183,6 +188,42 @@ def init_db():
     conn.close()
 
 init_db()
+
+# Dialog / Modal Function for Editing Employee
+@st.dialog("✏️ Edit Employee Details")
+def edit_employee_dialog(emp_data):
+    st.write(f"Editing record for: **{emp_data['emp_id']} - {emp_data['emp_name']}**")
+    with st.form("edit_modal_form"):
+        c1, c2 = st.columns(2)
+        e_name = c1.text_input("Name", value=emp_data['emp_name'])
+        e_status = c2.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
+        
+        c3, c4 = st.columns(2)
+        e_mobile = c3.text_input("Mobile", value=emp_data['mobile'])
+        e_location = c4.text_input("Location", value=emp_data['location'])
+        
+        c5, c6 = st.columns(2)
+        e_pemail = c5.text_input("Personal Email", value=emp_data['personal_email'])
+        e_oemail = c6.text_input("Office Email", value=emp_data['office_email'])
+        
+        c7, c8 = st.columns(2)
+        e_aadhar = c7.text_input("Aadhar", value=emp_data['aadhar'])
+        e_pan = c8.text_input("PAN", value=emp_data['pan'])
+        
+        e_inventory = st.text_input("Inventory Details", value=emp_data['inventory_details'])
+
+        save_btn = st.form_submit_button("Save Changes", type="primary")
+        if save_btn:
+            conn = get_db_connection()
+            conn.cursor().execute("""
+                UPDATE employees 
+                SET emp_name=?, status=?, mobile=?, location=?, personal_email=?, office_email=?, aadhar=?, pan=?, inventory_details=?
+                WHERE emp_id=?
+            """, (e_name, e_status, e_mobile, e_location, e_pemail, e_oemail, e_aadhar, e_pan, e_inventory, emp_data['emp_id']))
+            conn.commit()
+            conn.close()
+            st.success("Details updated successfully!")
+            st.rerun()
 
 # ==============================================================================
 # 3. SIDEBAR NAVIGATION
@@ -340,10 +381,10 @@ elif main_menu == "➕ Add Employee":
                     conn.close()
 
 # ==============================================================================
-# 6. EMPLOYEE MASTER (RESTORED TABLE VIEW WITH EDIT & DOWNLOAD OPTIONS)
+# 6. EMPLOYEE MASTER (CLEAN DATA TABLE WITH INLINE EDIT & DELETE)
 # ==============================================================================
 elif main_menu == "👥 Employee Master":
-    st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory & Management</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
     df_all = pd.read_sql_query("SELECT * FROM employees", conn)
@@ -352,98 +393,62 @@ elif main_menu == "👥 Employee Master":
     if len(df_all) == 0:
         st.info("Abhi koi employee record nahi hai. Sidebar se **➕ Add Employee** par jayein.")
     else:
-        # Search & Export Bar (Clean Layout)
-        sc1, sc2 = st.columns([4, 1])
-        search = sc1.text_input("🔍 Search Employee by Name or ID:", "", placeholder="Type name or ID...")
-        
+        # Search Bar
+        search = st.text_input("🔍 Search Employee by Name or ID:", "", placeholder="Type name or ID...")
         if search:
             df_all = df_all[
                 df_all['emp_name'].str.contains(search, case=False, na=False) |
                 df_all['emp_id'].str.contains(search, case=False, na=False)
             ]
 
-        # Export CSV Button
-        csv_data = df_all.to_csv(index=False).encode('utf-8')
-        sc2.write("")
-        sc2.download_button("📥 Export CSV", data=csv_data, file_name="employee_directory.csv", mime="text/csv")
-        
         st.write("")
+
+        # Render Table Header
+        headers = ["Actions", "emp_id", "emp_name", "status", "mobile", "personal_email", "office_email", "aadhar", "pan", "emergency_name", "emergency_contact", "location", "doj", "dob", "inventory_details"]
+        cols_width = [1.2, 1, 1.5, 1, 1.2, 1.8, 1.8, 1.2, 1.2, 1.2, 1.2, 1, 1, 1, 1.5]
         
-        # Display Standard Formatted Full Table View (Exact original look)
-        display_df = df_all.copy()
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        # Table Header Row
+        h_cols = st.columns(cols_width)
+        for idx, head in enumerate(headers):
+            h_cols[idx].markdown(f"**{head}**")
+        st.markdown("<hr style='margin: 5px 0px; border-color: #ddd;'/>", unsafe_allow_html=True)
 
-        st.write("---")
-        
-        # Edit & Documents Panel Below Table
-        st.subheader("⚙️ Quick Manage & Edit Employee Details")
-        
-        emp_list = list(df_all['emp_id'] + " - " + df_all['emp_name'])
-        selected_emp_str = st.selectbox("Select Employee to Edit / View Documents:", emp_list)
-        
-        if selected_emp_str:
-            sel_emp_id = selected_emp_str.split(" - ")[0]
-            emp_data = df_all[df_all['emp_id'] == sel_emp_id].iloc[0]
+        # Table Data Rows with Edit/Delete Buttons
+        for idx, row in df_all.iterrows():
+            r_cols = st.columns(cols_width)
+            
+            # Action Buttons Column (Edit & Delete)
+            btn_col1, btn_col2 = r_cols[0].columns(2)
+            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record"):
+                edit_employee_dialog(row)
+            
+            if btn_col2.button("🗑️", key=f"del_{row['emp_id']}", help="Delete Record"):
+                conn = get_db_connection()
+                conn.cursor().execute("DELETE FROM employees WHERE emp_id=?", (row['emp_id'],))
+                conn.commit()
+                conn.close()
+                st.toast(f"Employee {row['emp_id']} deleted!")
+                st.rerun()
 
-            act_tab1, act_tab2 = st.tabs(["✏️ Edit Employee Details", "📂 View & Download Documents"])
-
-            # Edit Tab
-            with act_tab1:
-                with st.form(f"edit_form_{sel_emp_id}"):
-                    c1, c2, c3 = st.columns(3)
-                    e_name = c1.text_input("Employee Name", value=emp_data['emp_name'])
-                    e_mobile = c2.text_input("Mobile Number", value=emp_data['mobile'])
-                    e_status = c3.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
-
-                    c4, c5, c6 = st.columns(3)
-                    e_pemail = c4.text_input("Personal Email", value=emp_data['personal_email'])
-                    e_oemail = c5.text_input("Office Email", value=emp_data['office_email'])
-                    e_location = c6.text_input("Location", value=emp_data['location'])
-
-                    c7, c8, c9 = st.columns(3)
-                    e_aadhar = c7.text_input("Aadhar", value=emp_data['aadhar'])
-                    e_pan = c8.text_input("PAN", value=emp_data['pan'])
-                    e_inventory = c9.text_input("Inventory Details", value=emp_data['inventory_details'])
-
-                    btn_update = st.form_submit_button("Update Employee Details", type="primary")
-
-                    if btn_update:
-                        conn = get_db_connection()
-                        conn.cursor().execute("""
-                            UPDATE employees 
-                            SET emp_name=?, mobile=?, status=?, personal_email=?, office_email=?, location=?, aadhar=?, pan=?, inventory_details=?
-                            WHERE emp_id=?
-                        """, (e_name, e_mobile, e_status, e_pemail, e_oemail, e_location, e_aadhar, e_pan, e_inventory, sel_emp_id))
-                        conn.commit()
-                        conn.close()
-                        st.success("Employee Details Updated Successfully!")
-                        st.rerun()
-
-            # View Documents Tab
-            with act_tab2:
-                docs_raw = emp_data['documents_uploaded']
-                try:
-                    docs = json.loads(docs_raw) if docs_raw else []
-                except:
-                    docs = []
-
-                if not docs:
-                    st.info("Is employee ke koi documents upload nahi hain.")
-                else:
-                    for doc in docs:
-                        dc1, dc2, dc3 = st.columns([2, 3, 2])
-                        dc1.write(f"**Type:** {doc.get('type', 'Document')}")
-                        dc2.write(f"**Filename:** {doc.get('filename', '')}")
-                        
-                        file_path = doc.get('path', '')
-                        if os.path.exists(file_path):
-                            with open(file_path, "rb") as f:
-                                dc3.download_button("⬇️ Download File", data=f, file_name=doc['filename'], key=f"dl_{sel_emp_id}_{doc['filename']}")
-                        else:
-                            dc3.write("File available in text format")
+            # Data Columns
+            r_cols[1].write(row['emp_id'])
+            r_cols[2].write(row['emp_name'])
+            r_cols[3].write(row['status'])
+            r_cols[4].write(row['mobile'])
+            r_cols[5].write(row['personal_email'])
+            r_cols[6].write(row['office_email'])
+            r_cols[7].write(row['aadhar'])
+            r_cols[8].write(row['pan'])
+            r_cols[9].write(row['emergency_name'])
+            r_cols[10].write(row['emergency_contact'])
+            r_cols[11].write(row['location'])
+            r_cols[12].write(row['doj'])
+            r_cols[13].write(row['dob'])
+            r_cols[14].write(row['inventory_details'])
+            st.markdown("<hr style='margin: 3px 0px; border-color: #eee;'/>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. LEAVE TRACKER (WITH 3-MONTH ELIGIBILITY CHECK)
+# 7. LEAVE TRACKER
 # ==============================================================================
 elif main_menu == "🍃 Leave Tracker":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Apply Leave</h2>", unsafe_allow_html=True)
@@ -459,7 +464,6 @@ elif main_menu == "🍃 Leave Tracker":
         selected_emp_key = st.selectbox("Select Employee", list(emp_map.keys()))
         selected_emp = emp_map[selected_emp_key]
 
-        # Eligibility check (90 days / 3 months)
         try:
             doj_date = datetime.strptime(selected_emp['doj'], "%Y-%m-%d").date()
             days_completed = (date.today() - doj_date).days
