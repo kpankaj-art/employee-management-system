@@ -184,7 +184,7 @@ def parse_date_input(d_input):
     return ""
 
 
-# FIXED STATUS LOGIC
+# STATUS LOGIC
 def get_computed_status(status, doe, term_date):
     s_upper = str(status).upper() if status else "ACTIVE"
 
@@ -401,190 +401,10 @@ if not df_all_emp.empty:
 # 1. EMPLOYEES DIRECTORY
 # ==============================================================================
 if choice == "👥 EMPLOYEES DIRECTORY":
-    col_title, col_actions = st.columns([3, 2])
 
-    with col_title:
-        st.markdown("## 👥 Employees Directory")
-        st.caption("Manage employee details, status, promotions, and working days")
-
-    with col_actions:
-        st.write(" ")
-        if not df_all_emp.empty:
-            file_name = "ALL_EMPLOYEES_REPORT.xlsx"
-            with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
-                df_all_emp.to_excel(writer, sheet_name="EMPLOYEES", index=False)
-            with open(file_name, "rb") as f:
-                st.download_button(
-                    "📥 EXPORT DATA",
-                    f,
-                    file_name=file_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
-
-    st.divider()
-
-    if df_all_emp.empty:
-        st.info("NO EMPLOYEE REGISTERED YET. ADD FROM SIDEBAR.")
-    else:
-        f_col1, f_col2, f_col3 = st.columns([2, 1.5, 1.5])
-        search_query = f_col1.text_input(
-            "🔎 SEARCH",
-            placeholder="SEARCH BY NAME, EMP ID, EMAIL, LOCATION, PAN...",
-            label_visibility="collapsed",
-        )
-
-        db_depts = [
-            str(x).upper()
-            for x in df_all_emp["department"].dropna().unique()
-            if str(x).strip() != ""
-        ]
-        all_depts_unique = sorted(list(set(STANDARD_DEPTS + db_depts)))
-        dept_list = ["ALL DEPARTMENTS"] + all_depts_unique
-
-        dept_filter = f_col2.selectbox(
-            "DEPARTMENT", dept_list, label_visibility="collapsed"
-        )
-        status_filter = f_col3.selectbox(
-            "STATUS",
-            ["ALL STATUS", "ACTIVE", "INACTIVE", "BLACKLISTED", "TERMINATED"],
-            label_visibility="collapsed",
-        )
-
-        filtered_df = df_all_emp.copy()
-
-        if search_query:
-            filtered_df = filtered_df[
-                filtered_df["name"]
-                .astype(str)
-                .str.contains(search_query, case=False, na=False)
-                | filtered_df["emp_id"]
-                .astype(str)
-                .str.contains(search_query, case=False, na=False)
-                | filtered_df["personal_email"]
-                .astype(str)
-                .str.contains(search_query, case=False, na=False)
-                | filtered_df["location"]
-                .astype(str)
-                .str.contains(search_query, case=False, na=False)
-            ]
-        if dept_filter != "ALL DEPARTMENTS":
-            filtered_df = filtered_df[
-                filtered_df["department"].astype(str).str.upper() == dept_filter
-            ]
-        if status_filter != "ALL STATUS":
-            filtered_df = filtered_df[
-                filtered_df["computed_status"].astype(str).str.upper()
-                == status_filter
-            ]
-
-        st.write(" ")
-
-        for _, row in filtered_df.iterrows():
-            emp_id = str(row["emp_id"]).upper()
-            name = str(row.get("name", "")).upper()
-            emp_status = row.get("computed_status")
-            location = str(
-                row.get("location") if pd.notna(row.get("location")) else "N/A"
-            ).upper()
-            dept = str(
-                row.get("department")
-                if pd.notna(row.get("department"))
-                else "DEVELOPMENT"
-            ).upper()
-            designation = str(
-                row.get("designation")
-                if pd.notna(row.get("designation"))
-                else "SOFTWARE ENGINEER"
-            ).upper()
-
-            exit_or_term = (
-                row.get("termination_date")
-                if emp_status == "TERMINATED"
-                else row.get("doe")
-            )
-            w_days = calculate_working_days(
-                row.get("joining_date"), exit_or_term
-            )
-
-            sync_leave_cycles(emp_id)
-
-            badge_class = "status-active"
-            if emp_status == "INACTIVE":
-                badge_class = "status-inactive"
-            elif emp_status == "TERMINATED":
-                badge_class = "status-terminated"
-            elif emp_status == "BLACKLISTED":
-                badge_class = "status-blacklisted"
-
-            with st.container():
-                (
-                    c_id,
-                    c_name,
-                    c_loc,
-                    c_dept,
-                    c_desg,
-                    c_wd,
-                    c_status,
-                    c_act1,
-                    c_act2,
-                    c_act3,
-                ) = st.columns([1.0, 2.0, 1.3, 1.5, 1.8, 1.2, 1.3, 0.5, 0.5, 0.5])
-
-                c_id.markdown(f"**`{emp_id}`**")
-                c_name.markdown(f"**{name}**")
-                c_loc.markdown(f"📍 {location}")
-                c_dept.markdown(f"{dept}")
-                c_desg.markdown(f"{designation}")
-                c_wd.markdown(f"💼 **{w_days} DAYS**")
-                c_status.markdown(
-                    f"<span class='status-pill {badge_class}'>{emp_status}</span>",
-                    unsafe_allow_html=True,
-                )
-
-                if c_act1.button("👁️", key=f"v_{emp_id}", help="VIEW PROFILE"):
-                    st.session_state["view_id"] = emp_id
-
-                if c_act2.button(
-                    "✏️", key=f"e_{emp_id}", help="EDIT DETAILS / PROMOTION"
-                ):
-                    st.session_state["edit_id"] = emp_id
-
-                if c_act3.button(
-                    "🗑️", key=f"d_{emp_id}", help="DELETE EMPLOYEE"
-                ):
-                    st.session_state["confirm_del_id"] = emp_id
-
-                st.divider()
-
-    # DELETE CONFIRMATION MODAL
-    if "confirm_del_id" in st.session_state:
-        del_emp_id = st.session_state["confirm_del_id"]
-        st.warning(
-            f"⚠️ ARE YOU SURE YOU WANT TO PERMANENTLY DELETE EMPLOYEE ID: **{del_emp_id}**?"
-        )
-        col_d1, col_d2 = st.columns([1, 4])
-        if col_d1.button("YES, DELETE PERMANENTLY", type="primary"):
-            delete_employee(del_emp_id)
-            st.success(f"EMPLOYEE {del_emp_id} DELETED SUCCESSFULLY!")
-            del st.session_state["confirm_del_id"]
-            if (
-                "view_id" in st.session_state
-                and st.session_state["view_id"] == del_emp_id
-            ):
-                del st.session_state["view_id"]
-            if (
-                "edit_id" in st.session_state
-                and st.session_state["edit_id"] == del_emp_id
-            ):
-                del st.session_state["edit_id"]
-            st.rerun()
-
-        if col_d2.button("CANCEL DELETE"):
-            del st.session_state["confirm_del_id"]
-            st.rerun()
-
-    # VIEW PROFILE MODAL
+    # --------------------------------------------------------------------------
+    # FULL PAGE VIEW: VIEW PROFILE
+    # --------------------------------------------------------------------------
     if "view_id" in st.session_state:
         v_id = st.session_state["view_id"]
         conn = get_connection()
@@ -616,12 +436,20 @@ if choice == "👥 EMPLOYEES DIRECTORY":
                 emp_rec.get("joining_date"), exit_or_term
             )
 
-            st.markdown(
-                f"### 👤 PROFILE: {str(emp_rec.get('name', '')).upper()} ({str(emp_rec.get('emp_id', '')).upper()})"
-            )
+            top_col1, top_col2 = st.columns([4, 1])
+            with top_col1:
+                st.markdown(
+                    f"## 👤 Employee Profile: **{str(emp_rec.get('name', '')).upper()}** (`{str(emp_rec.get('emp_id', '')).upper()}`)"
+                )
+            with top_col2:
+                if st.button("⬅️ BACK TO DIRECTORY", type="primary", use_container_width=True):
+                    del st.session_state["view_id"]
+                    st.rerun()
+
+            st.divider()
 
             col1, col2, col3 = st.columns(3)
-            col1.write(f"**STATUS:** {curr_status}")
+            col1.write(f"**STATUS:** `{curr_status}`")
             col1.write(
                 f"**LOCATION:** {str(emp_rec.get('location') if pd.notna(emp_rec.get('location')) else 'N/A').upper()}"
             )
@@ -668,10 +496,11 @@ if choice == "👥 EMPLOYEES DIRECTORY":
             st.write("---")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("WORKING DAYS", f"{working_days_total} DAYS")
-            m2.metric("CL BALANCE", format_days(emp_rec.get("cl_balance", 0)))
-            m3.metric("SL BALANCE", format_days(emp_rec.get("sl_balance", 0)))
-            m4.metric("PL BALANCE", format_days(emp_rec.get("pl_balance", 0)))
+            m2.metric("CASUAL LEAVE (CL)", format_days(emp_rec.get("cl_balance", 0)))
+            m3.metric("SICK LEAVE (SL)", format_days(emp_rec.get("sl_balance", 0)))
+            m4.metric("PRIVILEGE LEAVE (PL)", format_days(emp_rec.get("pl_balance", 0)))
 
+            st.write("---")
             t1, t2 = st.tabs(["💻 ASSIGNED INVENTORY", "📄 DOCUMENTS VAULT"])
 
             with t1:
@@ -708,7 +537,7 @@ if choice == "👥 EMPLOYEES DIRECTORY":
 
             with t2:
                 with st.expander(
-                    "➕ UPLOAD NEW DOCUMENTS (MULTIPLE ALLOWED)", expanded=False
+                    "➕ UPLOAD NEW DOCUMENTS", expanded=False
                 ):
                     with st.form(f"upload_vault_docs_{v_id}"):
                         vault_files = st.file_uploader(
@@ -849,13 +678,10 @@ if choice == "👥 EMPLOYEES DIRECTORY":
                                 st.error("❌ FILE DOES NOT EXIST ON SERVER!")
                             st.markdown("</div>", unsafe_allow_html=True)
 
-            st.write(" ")
-            if st.button("❌ CLOSE PROFILE"):
-                del st.session_state["view_id"]
-                st.rerun()
-
-    # EDIT DETAILS MODAL
-    if "edit_id" in st.session_state:
+    # --------------------------------------------------------------------------
+    # FULL PAGE VIEW: EDIT DETAILS
+    # --------------------------------------------------------------------------
+    elif "edit_id" in st.session_state:
         ed_id = st.session_state["edit_id"]
         conn = get_connection()
         df_emp_e = pd.read_sql_query(
@@ -866,9 +692,17 @@ if choice == "👥 EMPLOYEES DIRECTORY":
         if not df_emp_e.empty:
             rec = df_emp_e.iloc[0]
 
-            st.markdown(
-                f"### ✏️ EDIT DETAILS: {str(rec.get('name', '')).upper()}"
-            )
+            top_col1, top_col2 = st.columns([4, 1])
+            with top_col1:
+                st.markdown(
+                    f"## ✏️ Edit Details: **{str(rec.get('name', '')).upper()}** (`{ed_id}`)"
+                )
+            with top_col2:
+                if st.button("⬅️ BACK TO DIRECTORY", type="primary", use_container_width=True):
+                    del st.session_state["edit_id"]
+                    st.rerun()
+
+            st.divider()
 
             with st.form("edit_emp_form_full"):
                 st.markdown("##### 📌 STATUS & EXIT DETAILS")
@@ -1054,8 +888,183 @@ if choice == "👥 EMPLOYEES DIRECTORY":
                     del st.session_state["edit_id"]
                     st.rerun()
 
-            if st.button("CLOSE EDIT"):
-                del st.session_state["edit_id"]
+    # --------------------------------------------------------------------------
+    # DEFAULT VIEW: MAIN EMPLOYEE DIRECTORY LIST
+    # --------------------------------------------------------------------------
+    else:
+        col_title, col_actions = st.columns([3, 2])
+
+        with col_title:
+            st.markdown("## 👥 Employees Directory")
+            st.caption("Manage employee details, status, promotions, and working days")
+
+        with col_actions:
+            st.write(" ")
+            if not df_all_emp.empty:
+                file_name = "ALL_EMPLOYEES_REPORT.xlsx"
+                with pd.ExcelWriter(file_name, engine="openpyxl") as writer:
+                    df_all_emp.to_excel(writer, sheet_name="EMPLOYEES", index=False)
+                with open(file_name, "rb") as f:
+                    st.download_button(
+                        "📥 EXPORT DATA",
+                        f,
+                        file_name=file_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+
+        st.divider()
+
+        if df_all_emp.empty:
+            st.info("NO EMPLOYEE REGISTERED YET. ADD FROM SIDEBAR.")
+        else:
+            f_col1, f_col2, f_col3 = st.columns([2, 1.5, 1.5])
+            search_query = f_col1.text_input(
+                "🔎 SEARCH",
+                placeholder="SEARCH BY NAME, EMP ID, EMAIL, LOCATION, PAN...",
+                label_visibility="collapsed",
+            )
+
+            db_depts = [
+                str(x).upper()
+                for x in df_all_emp["department"].dropna().unique()
+                if str(x).strip() != ""
+            ]
+            all_depts_unique = sorted(list(set(STANDARD_DEPTS + db_depts)))
+            dept_list = ["ALL DEPARTMENTS"] + all_depts_unique
+
+            dept_filter = f_col2.selectbox(
+                "DEPARTMENT", dept_list, label_visibility="collapsed"
+            )
+            status_filter = f_col3.selectbox(
+                "STATUS",
+                ["ALL STATUS", "ACTIVE", "INACTIVE", "BLACKLISTED", "TERMINATED"],
+                label_visibility="collapsed",
+            )
+
+            filtered_df = df_all_emp.copy()
+
+            if search_query:
+                filtered_df = filtered_df[
+                    filtered_df["name"]
+                    .astype(str)
+                    .str.contains(search_query, case=False, na=False)
+                    | filtered_df["emp_id"]
+                    .astype(str)
+                    .str.contains(search_query, case=False, na=False)
+                    | filtered_df["personal_email"]
+                    .astype(str)
+                    .str.contains(search_query, case=False, na=False)
+                    | filtered_df["location"]
+                    .astype(str)
+                    .str.contains(search_query, case=False, na=False)
+                ]
+            if dept_filter != "ALL DEPARTMENTS":
+                filtered_df = filtered_df[
+                    filtered_df["department"].astype(str).str.upper() == dept_filter
+                ]
+            if status_filter != "ALL STATUS":
+                filtered_df = filtered_df[
+                    filtered_df["computed_status"].astype(str).str.upper()
+                    == status_filter
+                ]
+
+            st.write(" ")
+
+            for _, row in filtered_df.iterrows():
+                emp_id = str(row["emp_id"]).upper()
+                name = str(row.get("name", "")).upper()
+                emp_status = row.get("computed_status")
+                location = str(
+                    row.get("location") if pd.notna(row.get("location")) else "N/A"
+                ).upper()
+                dept = str(
+                    row.get("department")
+                    if pd.notna(row.get("department"))
+                    else "DEVELOPMENT"
+                ).upper()
+                designation = str(
+                    row.get("designation")
+                    if pd.notna(row.get("designation"))
+                    else "SOFTWARE ENGINEER"
+                ).upper()
+
+                exit_or_term = (
+                    row.get("termination_date")
+                    if emp_status == "TERMINATED"
+                    else row.get("doe")
+                )
+                w_days = calculate_working_days(
+                    row.get("joining_date"), exit_or_term
+                )
+
+                sync_leave_cycles(emp_id)
+
+                badge_class = "status-active"
+                if emp_status == "INACTIVE":
+                    badge_class = "status-inactive"
+                elif emp_status == "TERMINATED":
+                    badge_class = "status-terminated"
+                elif emp_status == "BLACKLISTED":
+                    badge_class = "status-blacklisted"
+
+                with st.container():
+                    (
+                        c_id,
+                        c_name,
+                        c_loc,
+                        c_dept,
+                        c_desg,
+                        c_wd,
+                        c_status,
+                        c_act1,
+                        c_act2,
+                        c_act3,
+                    ) = st.columns([1.0, 2.0, 1.3, 1.5, 1.8, 1.2, 1.3, 0.5, 0.5, 0.5])
+
+                    c_id.markdown(f"**`{emp_id}`**")
+                    c_name.markdown(f"**{name}**")
+                    c_loc.markdown(f"📍 {location}")
+                    c_dept.markdown(f"{dept}")
+                    c_desg.markdown(f"{designation}")
+                    c_wd.markdown(f"💼 **{w_days} DAYS**")
+                    c_status.markdown(
+                        f"<span class='status-pill {badge_class}'>{emp_status}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                    if c_act1.button("👁️", key=f"v_{emp_id}", help="VIEW PROFILE"):
+                        st.session_state["view_id"] = emp_id
+                        st.rerun()
+
+                    if c_act2.button(
+                        "✏️", key=f"e_{emp_id}", help="EDIT DETAILS / PROMOTION"
+                    ):
+                        st.session_state["edit_id"] = emp_id
+                        st.rerun()
+
+                    if c_act3.button(
+                        "🗑️", key=f"d_{emp_id}", help="DELETE EMPLOYEE"
+                    ):
+                        st.session_state["confirm_del_id"] = emp_id
+
+                    st.divider()
+
+        # DELETE CONFIRMATION MODAL
+        if "confirm_del_id" in st.session_state:
+            del_emp_id = st.session_state["confirm_del_id"]
+            st.warning(
+                f"⚠️ ARE YOU SURE YOU WANT TO PERMANENTLY DELETE EMPLOYEE ID: **{del_emp_id}**?"
+            )
+            col_d1, col_d2 = st.columns([1, 4])
+            if col_d1.button("YES, DELETE PERMANENTLY", type="primary"):
+                delete_employee(del_emp_id)
+                st.success(f"EMPLOYEE {del_emp_id} DELETED SUCCESSFULLY!")
+                del st.session_state["confirm_del_id"]
+                st.rerun()
+
+            if col_d2.button("CANCEL DELETE"):
+                del st.session_state["confirm_del_id"]
                 st.rerun()
 
 # ==============================================================================
