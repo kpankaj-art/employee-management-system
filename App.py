@@ -72,7 +72,7 @@ st.markdown("""
         color: #495057;
     }
 
-    div.stButton > button[key^="view_"] {
+    div.stButton > button[key^="view_"], div.stButton > button[key^="salhist_"] {
         background-color: #17a2b8 !important;
         color: white !important;
         border: none !important;
@@ -177,6 +177,16 @@ def init_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS salary_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            emp_id TEXT,
+            previous_salary REAL,
+            new_salary REAL,
+            updated_at TEXT
+        )
+    """)
+    
     # Check and add columns if they don't exist
     cursor.execute("PRAGMA table_info(employees)")
     columns = [column[1] for column in cursor.fetchall()]
@@ -276,7 +286,7 @@ def get_emp_leave_summary(emp_id):
     }
 
 # ==============================================================================
-# 3. DIALOGS (VIEW, EDIT & UPDATE SALARY)
+# 3. DIALOGS (VIEW, EDIT, SALARY & SALARY HISTORY)
 # ==============================================================================
 @st.dialog("💵 Update Employee Salary", width="small")
 def update_salary_dialog(emp_data):
@@ -289,12 +299,60 @@ def update_salary_dialog(emp_data):
     new_sal = st.number_input("Enter New Monthly Salary (₹)", value=current_sal, min_value=0.0, step=1000.0, format="%.2f")
     
     if st.button("💾 Save Salary Update", type="primary", use_container_width=True):
-        conn = get_db_connection()
-        conn.cursor().execute("UPDATE employees SET salary=? WHERE emp_id=?", (new_sal, emp_data['emp_id']))
-        conn.commit()
-        conn.close()
-        st.toast("Salary updated successfully!")
-        st.rerun()
+        if new_sal != current_sal:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Record current salary to history table
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            cursor.execute("""
+                INSERT INTO salary_history (emp_id, previous_salary, new_salary, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (emp_data['emp_id'], current_sal, new_sal, now_str))
+            
+            # Update main employee table
+            cursor.execute("UPDATE employees SET salary=? WHERE emp_id=?", (new_sal, emp_data['emp_id']))
+            conn.commit()
+            conn.close()
+            st.toast("Salary updated & history saved!")
+            st.rerun()
+        else:
+            st.info("Salary same hai, koi change nahi hua.")
+
+@st.dialog("📜 Salary Revision History", width="large")
+def view_salary_history_dialog(emp_data):
+    st.markdown(f"### **{emp_data['emp_name']}** (`{emp_data['emp_id']}`)")
+    st.caption(f"Current Salary: **₹{float(emp_data['salary'] or 0.0):,.2f}**")
+    st.markdown("---")
+    
+    conn = get_db_connection()
+    df_hist = pd.read_sql_query("SELECT previous_salary, new_salary, updated_at FROM salary_history WHERE emp_id=? ORDER BY id DESC", conn, params=(emp_data['emp_id'],))
+    conn.close()
+    
+    if len(df_hist) == 0:
+        st.info("Is employee ki abhi tak koi salary revision history nahi hai.")
+    else:
+        st.markdown("##### 📈 Past Salary Changes:")
+        
+        hist_ratios = [1.5, 1.5, 1.5, 1.5]
+        th = st.columns(hist_ratios)
+        headers = ["Date & Time", "Previous Salary", "New Salary", "Increment (₹)"]
+        for idx, head in enumerate(headers):
+            th[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
+            
+        for _, h_row in df_hist.iterrows():
+            tr = st.columns(hist_ratios)
+            prev_s = float(h_row['previous_salary'])
+            new_s = float(h_row['new_salary'])
+            diff = new_s - prev_s
+            
+            tr[0].markdown(f"<div class='admin-table-row'>{h_row['updated_at']}</div>", unsafe_allow_html=True)
+            tr[1].markdown(f"<div class='admin-table-row'>₹{prev_s:,.2f}</div>", unsafe_allow_html=True)
+            tr[2].markdown(f"<div class='admin-table-row'><b style='color:#28a745;'>₹{new_s:,.2f}</b></div>", unsafe_allow_html=True)
+            
+            diff_color = "#28a745" if diff >= 0 else "#dc3545"
+            diff_sign = "+" if diff >= 0 else ""
+            tr[3].markdown(f"<div class='admin-table-row'><b style='color:{diff_color};'>{diff_sign}₹{diff:,.2f}</b></div>", unsafe_allow_html=True)
 
 @st.dialog("👁️ View Employee Details", width="large")
 def view_employee_dialog(emp_data):
@@ -414,6 +472,14 @@ def edit_employee_dialog(emp_data):
                 final_inv_str = ", ".join(all_inv)
 
                 conn = get_db_connection()
+                old_salary = float(emp_data['salary'] or 0.0)
+                if old_salary != e_salary:
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    conn.cursor().execute("""
+                        INSERT INTO salary_history (emp_id, previous_salary, new_salary, updated_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (emp_data['emp_id'], old_salary, e_salary, now_str))
+
                 conn.cursor().execute("""
                     UPDATE employees 
                     SET emp_name=?, department=?, designation=?, status=?, mobile=?, personal_email=?, office_email=?, location=?,
@@ -866,9 +932,9 @@ elif main_menu == "💵 Salary Management":
             ]
 
         # Table Column Headers
-        sal_col_ratios = [1.2, 2.0, 1.8, 1.8, 1.5, 1.5]
+        sal_col_ratios = [1.2, 2.0, 1.8, 1.8, 1.5, 2.0]
         th_cols = st.columns(sal_col_ratios)
-        headers = ["Emp Code", "Name", "Department", "Designation", "Monthly Salary (₹)", "Action"]
+        headers = ["Emp Code", "Name", "Department", "Designation", "Current Salary (₹)", "Actions / Tools"]
         for idx, head in enumerate(headers):
             th_cols[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
         
@@ -883,5 +949,10 @@ elif main_menu == "💵 Salary Management":
             sal_val = float(row['salary']) if row['salary'] else 0.0
             tr_cols[4].markdown(f"<div class='admin-table-row'><b style='color:#28a745;'>₹{sal_val:,.2f}</b></div>", unsafe_allow_html=True)
             
-            if tr_cols[5].button("✏️ Update Salary", key=f"sal_{row['emp_id']}"):
+            act1, act2 = tr_cols[5].columns(2)
+            
+            if act1.button("👁️ View", key=f"salhist_{row['emp_id']}"):
+                view_salary_history_dialog(row)
+
+            if act2.button("✏️ Update", key=f"sal_{row['emp_id']}"):
                 update_salary_dialog(row)
