@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling for AdminLTE theme
+# Custom Styling matching Image 2 (AdminLTE Style Tables & Buttons)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
@@ -45,35 +45,6 @@ st.markdown("""
         padding: 13px 10px;
         margin-top: -10px;
     }
-    
-    .sidebar-user {
-        padding: 12px 15px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        background-color: #222d32;
-    }
-    
-    .sidebar-user-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background-color: #f39c12;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-    }
-
-    .sidebar-header {
-        color: #4b646f !important;
-        background: #1a2226;
-        padding: 8px 15px;
-        font-size: 11px;
-        font-weight: 700;
-        margin-top: 10px;
-    }
 
     /* Top Header Bar */
     .top-navbar {
@@ -84,6 +55,49 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+    }
+
+    /* Table Container Styling */
+    .admin-table-header {
+        background-color: #ffffff;
+        font-weight: 700;
+        color: #333333;
+        border-bottom: 2px solid #dee2e6;
+        padding: 10px 5px;
+        font-size: 14px;
+    }
+    
+    .admin-table-row {
+        background-color: #ffffff;
+        border-bottom: 1px solid #e9ecef;
+        padding: 8px 5px;
+        font-size: 13px;
+        color: #495057;
+    }
+
+    .admin-table-row:hover {
+        background-color: #f8f9fa;
+    }
+
+    /* Styled Buttons like Image 2 */
+    div.stButton > button[key^="edit_"] {
+        background-color: #28a745 !important;
+        color: white !important;
+        border: none !important;
+        padding: 4px 10px !important;
+        font-size: 12px !important;
+        border-radius: 3px !important;
+        width: 100%;
+    }
+    
+    div.stButton > button[key^="del_"] {
+        background-color: #dc3545 !important;
+        color: white !important;
+        border: none !important;
+        padding: 4px 10px !important;
+        font-size: 12px !important;
+        border-radius: 3px !important;
+        width: 100%;
     }
 
     /* Metric Cards */
@@ -105,11 +119,6 @@ st.markdown("""
         font-weight: 700;
         color: #333;
         margin-top: 5px;
-    }
-
-    /* Table Compact Styling */
-    div[data-testid="stColumn"] {
-        padding: 2px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -301,7 +310,6 @@ def edit_employee_dialog(emp_data):
                     if os.path.exists(file_path):
                         ext = os.path.splitext(file_name)[1].lower()
                         
-                        # Preview logic based on extension
                         st.markdown("**Preview:**")
                         if ext in ['.png', '.jpg', '.jpeg']:
                             st.image(file_path, caption=file_name, use_column_width=True)
@@ -311,7 +319,6 @@ def edit_employee_dialog(emp_data):
                             st.caption(f"📁 Preview not supported for {ext} files. Please download to view.")
                         
                         st.write("")
-                        # Download & Delete Action Buttons
                         btn_c1, btn_c2 = st.columns([1, 4])
                         with open(file_path, "rb") as f:
                             btn_c1.download_button("⬇️ Download File", data=f, file_name=file_name, key=f"preview_dl_{emp_data['emp_id']}_{idx}", type="primary")
@@ -332,7 +339,7 @@ def edit_employee_dialog(emp_data):
         with st.form("modal_upload_form"):
             uc1, uc2 = st.columns([1, 2])
             new_doc_type = uc1.selectbox("Document Category", ["Aadhar Card", "PAN Card", "Offer Letter", "Relieving Letter", "Markssheet", "Resume", "Other"])
-            new_file = uc2.file_uploader("Choose File (PDF, PNG, JPG supported for preview)", type=['pdf', 'png', 'jpg', 'jpeg', 'docx'])
+            new_file = uc2.file_uploader("Choose File (PDF, PNG, JPG supported)", type=['pdf', 'png', 'jpg', 'jpeg', 'docx'])
             
             upload_submit = st.form_submit_button("⬆️ Upload Document")
             
@@ -520,7 +527,7 @@ elif main_menu == "➕ Add Employee":
                     conn.close()
 
 # ==============================================================================
-# 6. EMPLOYEE MASTER (TABLE VIEW WITH INLINE ACTIONS)
+# 6. EMPLOYEE MASTER (NEW CLEAN ADMIN-LTE STYLE TABLE LIKE IMAGE 2)
 # ==============================================================================
 elif main_menu == "👥 Employee Master":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory</h2>", unsafe_allow_html=True)
@@ -532,59 +539,58 @@ elif main_menu == "👥 Employee Master":
     if len(df_all) == 0:
         st.info("Abhi koi employee record nahi hai. Sidebar se **➕ Add Employee** par jayein.")
     else:
-        # Search Bar
-        search = st.text_input("🔍 Search Employee by Name or ID:", "", placeholder="Type name or ID...")
+        # Search & Display Controls
+        sc1, sc2 = st.columns([3, 1])
+        search = sc1.text_input("🔍 Search Employee:", "", placeholder="Type name, ID or mobile...")
         if search:
             df_all = df_all[
                 df_all['emp_name'].str.contains(search, case=False, na=False) |
-                df_all['emp_id'].str.contains(search, case=False, na=False)
+                df_all['emp_id'].str.contains(search, case=False, na=False) |
+                df_all['mobile'].str.contains(search, case=False, na=False)
             ]
 
         st.write("")
 
-        # Render Table Header
-        headers = ["Actions", "emp_id", "emp_name", "status", "mobile", "personal_email", "office_email", "aadhar", "pan", "emergency_name", "emergency_contact", "location", "doj", "dob", "inventory_details"]
-        cols_width = [1.2, 1, 1.5, 1, 1.2, 1.8, 1.8, 1.2, 1.2, 1.2, 1.2, 1, 1, 1, 1.5]
+        # Column Layout Width Ratios to prevent horizontal text wrapping issue
+        # Clean Admin Table headers matching Image 2
+        col_ratios = [1.1, 1.4, 0.8, 1.1, 1.6, 1.0, 1.0, 1.3, 1.8]
         
         # Table Header Row
-        h_cols = st.columns(cols_width)
+        th_cols = st.columns(col_ratios)
+        headers = ["Emp ID", "Name", "Status", "Mobile", "Office Email", "DOJ", "Location", "Assets", "Tools / Actions"]
+        
         for idx, head in enumerate(headers):
-            h_cols[idx].markdown(f"**{head}**")
-        st.markdown("<hr style='margin: 5px 0px; border-color: #ddd;'/>", unsafe_allow_html=True)
-
+            th_cols[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
+        
         # Table Data Rows
         for idx, row in df_all.iterrows():
-            r_cols = st.columns(cols_width)
+            tr_cols = st.columns(col_ratios)
             
-            # Action Buttons Column
-            btn_col1, btn_col2 = r_cols[0].columns(2)
-            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & View Documents"):
+            tr_cols[0].markdown(f"<div class='admin-table-row'><b>{row['emp_id']}</b></div>", unsafe_allow_html=True)
+            tr_cols[1].markdown(f"<div class='admin-table-row'>{row['emp_name']}</div>", unsafe_allow_html=True)
+            
+            # Status badge style
+            status_color = "#28a745" if row['status'] == 'Active' else "#dc3545"
+            tr_cols[2].markdown(f"<div class='admin-table-row'><span style='color:{status_color}; font-weight:bold;'>● {row['status']}</span></div>", unsafe_allow_html=True)
+            
+            tr_cols[3].markdown(f"<div class='admin-table-row'>{row['mobile'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[4].markdown(f"<div class='admin-table-row'>{row['office_email'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[5].markdown(f"<div class='admin-table-row'>{row['doj'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[6].markdown(f"<div class='admin-table-row'>{row['location'] or '-'}</div>", unsafe_allow_html=True)
+            tr_cols[7].markdown(f"<div class='admin-table-row'>{row['inventory_details'] or '-'}</div>", unsafe_allow_html=True)
+            
+            # Action Buttons Column like Image 2 (Green Edit + Red Delete)
+            act_col1, act_col2 = tr_cols[8].columns(2)
+            if act_col1.button("✏️ Edit", key=f"edit_{row['emp_id']}"):
                 edit_employee_dialog(row)
             
-            if btn_col2.button("🗑️", key=f"del_{row['emp_id']}", help="Delete Record"):
+            if act_col2.button("🗑️ Delete", key=f"del_{row['emp_id']}"):
                 conn = get_db_connection()
                 conn.cursor().execute("DELETE FROM employees WHERE emp_id=?", (row['emp_id'],))
                 conn.commit()
                 conn.close()
                 st.toast(f"Employee {row['emp_id']} deleted!")
                 st.rerun()
-
-            # Data Columns
-            r_cols[1].write(row['emp_id'])
-            r_cols[2].write(row['emp_name'])
-            r_cols[3].write(row['status'])
-            r_cols[4].write(row['mobile'])
-            r_cols[5].write(row['personal_email'])
-            r_cols[6].write(row['office_email'])
-            r_cols[7].write(row['aadhar'])
-            r_cols[8].write(row['pan'])
-            r_cols[9].write(row['emergency_name'])
-            r_cols[10].write(row['emergency_contact'])
-            r_cols[11].write(row['location'])
-            r_cols[12].write(row['doj'])
-            r_cols[13].write(row['dob'])
-            r_cols[14].write(row['inventory_details'])
-            st.markdown("<hr style='margin: 3px 0px; border-color: #eee;'/>", unsafe_allow_html=True)
 
 # ==============================================================================
 # 7. LEAVE TRACKER
