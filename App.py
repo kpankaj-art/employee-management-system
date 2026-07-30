@@ -10,7 +10,7 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="HR & Payroll Management System",
+    page_title="HR Management System",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -117,7 +117,7 @@ st.markdown("""
 # Top Bar Header
 st.markdown("""
     <div class="top-navbar">
-        <div style="font-size: 18px; font-weight: 600;">HR & Payroll Management System</div>
+        <div style="font-size: 18px; font-weight: 600;">HR Management System</div>
         <div style="font-size: 14px; display: flex; align-items: center; gap: 8px;">
             <span style="background-color:#f39c12; padding:3px 8px; border-radius:50%; font-weight:bold; font-size:12px;">A</span>
             Welcome Admin
@@ -401,7 +401,7 @@ def edit_employee_dialog(emp_data):
 # ==============================================================================
 # 4. SIDEBAR NAVIGATION
 # ==============================================================================
-st.sidebar.markdown('<div class="sidebar-brand">Payroll</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-brand">HR</div>', unsafe_allow_html=True)
 st.sidebar.markdown("""
     <div class="sidebar-user">
         <div style="color:#fff; font-weight:600; font-size:14px;">Welcome Admin</div>
@@ -419,7 +419,7 @@ main_menu = st.sidebar.radio(
 # 5. PAGE ROUTING & LOGIC
 # ==============================================================================
 if main_menu == "📊 Dashboard":
-    st.markdown("<h2 style='color:#333; font-weight:400;'>HR Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:500;'>HR Dashboard</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
     df_emp = pd.read_sql_query("SELECT * FROM employees", conn)
