@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling (AdminLTE Theme)
+# Custom Styling (AdminLTE Theme + Custom Enhanced Sidebar)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
@@ -28,21 +28,74 @@ st.markdown("""
     
     footer {visibility: hidden;}
     
+    /* SIDEBAR STYLING ENHANCEMENT */
     [data-testid="stSidebar"] {
-        background-color: #222d32 !important;
-    }
-    [data-testid="stSidebar"] * {
-        color: #b8c7ce !important;
+        background-color: #1e272c !important;
     }
     
     .sidebar-brand {
-        background-color: #008d4c;
+        background-color: #00a65a;
         color: #ffffff !important;
         text-align: center;
-        font-size: 20px;
+        font-size: 24px;
         font-weight: 700;
-        padding: 13px 10px;
-        margin-top: -10px;
+        padding: 15px 10px;
+        margin-top: -15px;
+        border-bottom: 2px solid #008d4c;
+        letter-spacing: 1px;
+    }
+
+    .sidebar-user {
+        padding: 15px 10px;
+        background-color: #222d32;
+        border-bottom: 1px solid #2c3b41;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    /* Bada Radio Navigation Text & Spacing */
+    [data-testid="stSidebar"] div[class*="stRadio"] label {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        padding: 10px 12px !important;
+        color: #c2c7d0 !important;
+        border-radius: 6px !important;
+        transition: all 0.3s ease !important;
+        margin-bottom: 4px !important;
+    }
+
+    [data-testid="stSidebar"] div[class*="stRadio"] label:hover {
+        background-color: #2c3b41 !important;
+        color: #ffffff !important;
+    }
+
+    /* Sidebar Extra Widgets */
+    .sidebar-widget {
+        background-color: #222d32;
+        border-radius: 8px;
+        padding: 12px 15px;
+        margin-top: 20px;
+        border-left: 4px solid #00a65a;
+        color: #b8c7ce;
+    }
+    .sidebar-widget-title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #8aa4af;
+        margin-bottom: 8px;
+    }
+    .sidebar-stat-item {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        padding: 4px 0;
+        border-bottom: 1px solid #2c3b41;
+    }
+    .sidebar-stat-item:last-child {
+        border-bottom: none;
     }
 
     .top-navbar {
@@ -187,7 +240,6 @@ def init_db():
         )
     """)
     
-    # Check and add columns if they don't exist
     cursor.execute("PRAGMA table_info(employees)")
     columns = [column[1] for column in cursor.fetchall()]
     if "department" not in columns:
@@ -285,6 +337,14 @@ def get_emp_leave_summary(emp_id):
         "pending_count": pending_df.iloc[0]['p_count'] if len(pending_df) > 0 else 0
     }
 
+# Quick stats helper for sidebar
+def get_quick_stats():
+    conn = get_db_connection()
+    act = conn.execute("SELECT COUNT(*) FROM employees WHERE status='Active'").fetchone()[0]
+    pend = conn.execute("SELECT COUNT(*) FROM leave_requests WHERE status='Pending'").fetchone()[0]
+    conn.close()
+    return act, pend
+
 # ==============================================================================
 # 3. DIALOGS (VIEW, EDIT, SALARY & SALARY HISTORY)
 # ==============================================================================
@@ -303,14 +363,12 @@ def update_salary_dialog(emp_data):
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Record current salary to history table
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
             cursor.execute("""
                 INSERT INTO salary_history (emp_id, previous_salary, new_salary, updated_at)
                 VALUES (?, ?, ?, ?)
             """, (emp_data['emp_id'], current_sal, new_sal, now_str))
             
-            # Update main employee table
             cursor.execute("UPDATE employees SET salary=? WHERE emp_id=?", (new_sal, emp_data['emp_id']))
             conn.commit()
             conn.close()
@@ -570,26 +628,73 @@ def edit_employee_dialog(emp_data):
                     st.rerun()
 
 # ==============================================================================
-# 4. SIDEBAR NAVIGATION
+# 4. ENHANCED SIDEBAR NAVIGATION & WIDGETS
 # ==============================================================================
-st.sidebar.markdown('<div class="sidebar-brand">Payroll</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-brand">💼 PAYROLL PORTAL</div>', unsafe_allow_html=True)
+
+# User Profile Header
 st.sidebar.markdown("""
     <div class="sidebar-user">
-        <div style="color:#fff; font-weight:600; font-size:14px;">Welcome Admin</div>
-        <div style="color:#00a65a; font-size:11px;">● Online</div>
+        <div style="width: 38px; height: 38px; border-radius: 50%; background-color: #00a65a; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 18px; border: 2px solid #fff;">
+            A
+        </div>
+        <div>
+            <div style="color:#ffffff; font-weight:600; font-size:15px; margin-bottom: 2px;">Welcome Admin</div>
+            <div style="color:#00a65a; font-size:12px; font-weight: bold;">● System Online</div>
+        </div>
     </div>
 """, unsafe_allow_html=True)
 
+# Main Navigation Menu with Icons
 main_menu = st.sidebar.radio(
-    "NAVIGATION",
-    ["📊 Dashboard", "➕ Add Employee", "👥 Employee Master", "🍃 Leave Tracker", "📑 Leave Management", "💵 Salary Management"],
+    "MAIN NAVIGATION",
+    [
+        "📊  Dashboard", 
+        "➕  Add Employee", 
+        "👥  Employee Master", 
+        "🍃  Leave Tracker", 
+        "📑  Leave Management", 
+        "💵  Salary Management"
+    ],
     label_visibility="collapsed"
 )
+
+st.sidebar.markdown("---")
+
+# Extra Widget 1: Live System Quick Stats
+act_count, pend_count = get_quick_stats()
+st.sidebar.markdown(f"""
+    <div class="sidebar-widget">
+        <div class="sidebar-widget-title">⚡ Quick System Overview</div>
+        <div class="sidebar-stat-item">
+            <span>Active Staff:</span>
+            <b style="color:#00a65a;">{act_count}</b>
+        </div>
+        <div class="sidebar-stat-item">
+            <span>Pending Leaves:</span>
+            <b style="color:#f39c12;">{pend_count}</b>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+# Extra Widget 2: Live Clock & Date
+st.sidebar.markdown(f"""
+    <div class="sidebar-widget" style="border-left-color: #17a2b8;">
+        <div class="sidebar-widget-title">📅 System Today</div>
+        <div style="font-size: 13px; font-weight: 600; color: #ffffff;">
+            {datetime.now().strftime("%A, %d %b %Y")}
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+st.sidebar.write("")
+if st.sidebar.button("🚪 Logout System", type="secondary", use_container_width=True):
+    st.sidebar.success("Logged out safely!")
 
 # ==============================================================================
 # 5. PAGE ROUTING & LOGIC
 # ==============================================================================
-if main_menu == "📊 Dashboard":
+if "Dashboard" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>HR Dashboard</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
@@ -613,7 +718,7 @@ if main_menu == "📊 Dashboard":
     with c4:
         st.markdown(f'<div class="metric-card" style="border-left-color: #f39c12;"><div class="metric-title">Missing Documents</div><div class="metric-value">{missing_docs_count}</div></div>', unsafe_allow_html=True)
 
-elif main_menu == "➕ Add Employee":
+elif "Add Employee" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>Add New Employee Details</h2>", unsafe_allow_html=True)
     
     if "form_submitted_success" in st.session_state and st.session_state.form_submitted_success:
@@ -708,7 +813,7 @@ elif main_menu == "➕ Add Employee":
                 finally:
                     conn.close()
 
-elif main_menu == "👥 Employee Master":
+elif "Employee Master" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
@@ -762,7 +867,7 @@ elif main_menu == "👥 Employee Master":
                 st.toast("Employee deleted!")
                 st.rerun()
 
-elif main_menu == "🍃 Leave Tracker":
+elif "Leave Tracker" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>Apply Leave</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
@@ -820,7 +925,7 @@ elif main_menu == "🍃 Leave Tracker":
                     st.toast("Leave Request submitted!")
                     st.rerun()
 
-elif main_menu == "📑 Leave Management":
+elif "Leave Management" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>Leave Management</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
@@ -911,7 +1016,7 @@ elif main_menu == "📑 Leave Management":
                     st.toast("Deleted!")
                     st.rerun()
 
-elif main_menu == "💵 Salary Management":
+elif "Salary Management" in main_menu:
     st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Salary Details</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
@@ -921,7 +1026,6 @@ elif main_menu == "💵 Salary Management":
     if len(df_sal) == 0:
         st.info("Abhi koi employee record nahi hai.")
     else:
-        # Search Filter
         sal_search = st.text_input("🔍 Search Salary Records:", "", placeholder="Type Name, Emp Code, Department or Designation...")
         if sal_search:
             df_sal = df_sal[
@@ -931,14 +1035,12 @@ elif main_menu == "💵 Salary Management":
                 df_sal['designation'].str.contains(sal_search, case=False, na=False)
             ]
 
-        # Table Column Headers
         sal_col_ratios = [1.2, 2.0, 1.8, 1.8, 1.5, 2.0]
         th_cols = st.columns(sal_col_ratios)
         headers = ["Emp Code", "Name", "Department", "Designation", "Current Salary (₹)", "Actions / Tools"]
         for idx, head in enumerate(headers):
             th_cols[idx].markdown(f"<div class='admin-table-header'>{head}</div>", unsafe_allow_html=True)
         
-        # Table Rows Data
         for idx, row in df_sal.iterrows():
             tr_cols = st.columns(sal_col_ratios)
             tr_cols[0].markdown(f"<div class='admin-table-row'><b>{row['emp_id']}</b></div>", unsafe_allow_html=True)
