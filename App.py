@@ -27,6 +27,22 @@ st.markdown("""
     }
     
     footer {visibility: hidden;}
+
+    /* ----------------------------------------------------------- */
+    /* HIDE TOP TOOLBAR (Share, Edit, GitHub) & BOTTOM MANAGE APP */
+    /* ----------------------------------------------------------- */
+    header[data-testid="stHeader"] {
+        visibility: hidden !important;
+        height: 0px !important;
+    }
+
+    [data-testid="stAppDeployButton"], 
+    .stAppDeployButton, 
+    div[class*="viewerBadge"],
+    #MainMenu {
+        display: none !important;
+    }
+    /* ----------------------------------------------------------- */
     
     /* SIDEBAR STYLING ENHANCEMENT */
     [data-testid="stSidebar"] {
@@ -60,7 +76,7 @@ st.markdown("""
         font-size: 16px !important;
         font-weight: 600 !important;
         padding: 10px 12px !important;
-        color: #ffffff !important; /* Pure White text for high visibility */
+        color: #ffffff !important; /* Pure White text */
         border-radius: 6px !important;
         transition: all 0.3s ease !important;
         margin-bottom: 4px !important;
@@ -75,7 +91,7 @@ st.markdown("""
 
     /* Selected Item Highlight */
     [data-testid="stSidebar"] div[class*="stRadio"] label[aria-checked="true"] p {
-        color: #00e676 !important; /* Bright Neon Green for active tab */
+        color: #00e676 !important; /* Bright Neon Green */
         font-weight: 700 !important;
     }
 
@@ -643,7 +659,6 @@ def edit_employee_dialog(emp_data):
 # ==============================================================================
 # 4. ENHANCED SIDEBAR NAVIGATION & WIDGETS
 # ==============================================================================
-# Renamed title to "HUMAN RESOURCES"
 st.sidebar.markdown('<div class="sidebar-brand">👥 HUMAN RESOURCES</div>', unsafe_allow_html=True)
 
 # User Profile Header
