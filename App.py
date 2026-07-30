@@ -419,7 +419,7 @@ main_menu = st.sidebar.radio(
 # 5. PAGE ROUTING & LOGIC
 # ==============================================================================
 if main_menu == "📊 Dashboard":
-    st.markdown("<h2 style='color:#333; font-weight:500;'>HR Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:800;'>HR Dashboard</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
     df_emp = pd.read_sql_query("SELECT * FROM employees", conn)
