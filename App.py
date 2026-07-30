@@ -1,19 +1,21 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import json
+import os
 from datetime import datetime, date
 
 # ==============================================================================
-# 1. PAGE CONFIGURATION
+# 1. PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
     page_title="HR & Payroll Management System",
     page_icon="📋",
     layout="wide",
-    initial_sidebar_state="expanded"  # Sidebar hamesha open rahega
+    initial_sidebar_state="expanded"
 )
 
-# Custom AdminLTE Styling (Fixed Sidebar Display)
+# AdminLTE Original Style Setup
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
@@ -23,13 +25,11 @@ st.markdown("""
         background-color: #ecf0f5 !important;
     }
     
-    /* Footer & Header clean-up */
     footer {visibility: hidden;}
     
     /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #222d32 !important;
-        padding-top: 0px !important;
     }
     [data-testid="stSidebar"] * {
         color: #b8c7ce !important;
@@ -74,7 +74,7 @@ st.markdown("""
         margin-top: 10px;
     }
 
-    /* Top Navbar */
+    /* Top Header Bar */
     .top-navbar {
         background-color: #1a4d3e;
         color: white;
@@ -108,7 +108,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Top Header Bar
+# Top Bar Header
 st.markdown("""
     <div class="top-navbar">
         <div style="font-size: 18px; font-weight: 600;">HR & Payroll Management System</div>
@@ -119,8 +119,13 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
+# Document Storage Directory
+UPLOADS_DIR = "uploaded_documents"
+if not os.path.exists(UPLOADS_DIR):
+    os.makedirs(UPLOADS_DIR)
+
 # ==============================================================================
-# 2. DATABASE INITIALIZATION
+# 2. DATABASE SETUP
 # ==============================================================================
 def get_db_connection():
     conn = sqlite3.connect("hr_management.db", check_same_thread=False)
@@ -164,13 +169,23 @@ def init_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS leave_balances (
+            emp_id TEXT PRIMARY KEY,
+            cl INTEGER DEFAULT 3,
+            sl INTEGER DEFAULT 3,
+            pl INTEGER DEFAULT 1,
+            paid_leave INTEGER DEFAULT 1
+        )
+    """)
+    
     conn.commit()
     conn.close()
 
 init_db()
 
 # ==============================================================================
-# 3. SIDEBAR NAVIGATION (ALWAYS VISIBLE)
+# 3. SIDEBAR NAVIGATION
 # ==============================================================================
 st.sidebar.markdown('<div class="sidebar-brand">Payroll</div>', unsafe_allow_html=True)
 
@@ -186,7 +201,6 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown('<div class="sidebar-header">MENU</div>', unsafe_allow_html=True)
 
-# Navigation Radio Buttons
 main_menu = st.sidebar.radio(
     "NAVIGATION",
     ["📊 Dashboard", "➕ Add Employee", "👥 Employee Master", "🍃 Leave Tracker", "📑 Leave Management"],
@@ -194,7 +208,7 @@ main_menu = st.sidebar.radio(
 )
 
 # ==============================================================================
-# 4. PAGE 1: DASHBOARD
+# 4. DASHBOARD PAGE
 # ==============================================================================
 if main_menu == "📊 Dashboard":
     st.markdown("<h2 style='color:#333; font-weight:400;'>HR Dashboard</h2>", unsafe_allow_html=True)
@@ -212,7 +226,6 @@ if main_menu == "📊 Dashboard":
     missing_docs_df = df_emp[(df_emp['documents_uploaded'].isna()) | (df_emp['documents_uploaded'] == '') | (df_emp['documents_uploaded'] == 'None')] if total_emp > 0 else pd.DataFrame()
     missing_docs_count = len(missing_docs_df)
     
-    # Metric Boxes
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f'<div class="metric-card" style="border-left-color: #00c0ef;"><div class="metric-title">Total Employees</div><div class="metric-value">{total_emp}</div></div>', unsafe_allow_html=True)
@@ -244,23 +257,23 @@ if main_menu == "📊 Dashboard":
             st.info("Koi pending leave request nahi hai.")
 
 # ==============================================================================
-# 5. PAGE 2: ADD EMPLOYEE
+# 5. ADD EMPLOYEE PAGE
 # ==============================================================================
 elif main_menu == "➕ Add Employee":
-    st.markdown("<h2 style='color:#333; font-weight:400;'>Add New Employee</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:400;'>Add New Employee Details</h2>", unsafe_allow_html=True)
     st.write("")
     
-    with st.form("add_emp_form", clear_on_submit=True):
+    with st.form("add_emp_form"):
         st.subheader("1. Basic & Contact Details")
         c1, c2, c3 = st.columns(3)
-        emp_id = c1.text_input("Employee ID *", placeholder="e.g. EMP1001")
+        emp_id = c1.text_input("Employee ID *", placeholder="e.g. VMPL19")
         emp_name = c2.text_input("Employee Name *", placeholder="Full Name")
         mobile = c3.text_input("Mobile Number", placeholder="10 Digit Number")
         
         c4, c5, c6 = st.columns(3)
         personal_email = c4.text_input("Personal Email")
         office_email = c5.text_input("Office Email")
-        location = c6.text_input("Work Location", value="Delhi WFO")
+        location = c6.text_input("Work Location", value="Gurgaon")
 
         st.subheader("2. Identity & Emergency Details")
         i1, i2, i3, i4 = st.columns(4)
@@ -271,25 +284,36 @@ elif main_menu == "➕ Add Employee":
 
         st.subheader("3. Important Dates & Status")
         d1, d2, d3, d4 = st.columns(4)
-        dob = d1.date_input("Date of Birth (DOB)", value=date(1995, 1, 1))
+        dob = d1.date_input("Date of Birth (DOB)", value=date(1998, 1, 19))
         doj = d2.date_input("Date of Joining (DOJ)", value=date.today())
         doe_check = d3.checkbox("Has Exit Date (DOE)?")
         doe = d4.date_input("Date of Exit (DOE)", value=date.today()) if doe_check else ""
         emp_status = d1.selectbox("Status", ["Active", "Inactive"])
 
-        st.subheader("4. Inventory & Documents")
-        inventory = st.text_area("Inventory Assigned", placeholder="e.g. Laptop Lenovo, Mouse, Headset")
-        uploaded_files = st.file_uploader("Documents Upload (Multiple Allowed)", accept_multiple_files=True)
+        st.subheader("4. Inventory & Asset Details")
+        inventory = st.text_input("Inventory Assigned", placeholder="e.g. Laptop, Mouse")
+
+        st.subheader("5. Document Upload Center")
+        doc_c1, doc_c2 = st.columns([1, 2])
+        doc_type = doc_c1.selectbox("Document Type", ["Aadhar Card", "PAN Card", "Offer Letter", "Experience Letter", "Markssheet", "Other"])
+        uploaded_files = doc_c2.file_uploader("Upload Documents (Multiple Allowed)", accept_multiple_files=True)
 
         submit_btn = st.form_submit_button("Save Employee", type="primary")
 
         if submit_btn:
             if not emp_id or not emp_name:
-                st.error("Employee ID aur Name mandatory hain!")
+                st.error("Employee ID aur Name mandatory hai!")
             else:
-                doc_names = [f.name for f in uploaded_files] if uploaded_files else []
-                docs_str = ", ".join(doc_names) if doc_names else ""
-                
+                saved_docs = []
+                if uploaded_files:
+                    for f in uploaded_files:
+                        file_path = os.path.join(UPLOADS_DIR, f"{emp_id}_{doc_type}_{f.name}")
+                        with open(file_path, "wb") as buffer:
+                            buffer.write(f.getbuffer())
+                        saved_docs.append({"type": doc_type, "filename": f.name, "path": file_path})
+
+                docs_str = json.dumps(saved_docs) if saved_docs else ""
+
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 try:
@@ -302,15 +326,21 @@ elif main_menu == "➕ Add Employee":
                         emp_id, emp_name, emp_status, mobile, personal_email, office_email, aadhar, pan,
                         emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), inventory, docs_str
                     ))
+                    
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO leave_balances (emp_id, cl, sl, pl, paid_leave)
+                        VALUES (?, 3, 3, 1, 1)
+                    """, (emp_id,))
+
                     conn.commit()
-                    st.success(f"Employee {emp_name} ({emp_id}) successfully add ho gaye!")
+                    st.success(f"Employee {emp_name} ({emp_id}) successfully saved!")
                 except sqlite3.IntegrityError:
                     st.error("Ye Employee ID pehle se registered hai!")
                 finally:
                     conn.close()
 
 # ==============================================================================
-# 6. PAGE 3: EMPLOYEE MASTER & MANAGEMENT
+# 6. EMPLOYEE MASTER (RESTORED TABLE VIEW WITH EDIT & DOWNLOAD OPTIONS)
 # ==============================================================================
 elif main_menu == "👥 Employee Master":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory & Management</h2>", unsafe_allow_html=True)
@@ -320,58 +350,157 @@ elif main_menu == "👥 Employee Master":
     conn.close()
     
     if len(df_all) == 0:
-        st.info("Abhi koi employee record nahi hai. Sidebar me **➕ Add Employee** par click karein.")
+        st.info("Abhi koi employee record nahi hai. Sidebar se **➕ Add Employee** par jayein.")
     else:
-        search = st.text_input("🔍 Search Employee by Name or ID:", "")
+        # Search & Export Bar (Clean Layout)
+        sc1, sc2 = st.columns([4, 1])
+        search = sc1.text_input("🔍 Search Employee by Name or ID:", "", placeholder="Type name or ID...")
+        
         if search:
             df_all = df_all[
                 df_all['emp_name'].str.contains(search, case=False, na=False) |
                 df_all['emp_id'].str.contains(search, case=False, na=False)
             ]
-            
-        st.dataframe(df_all, use_container_width=True, hide_index=True)
+
+        # Export CSV Button
+        csv_data = df_all.to_csv(index=False).encode('utf-8')
+        sc2.write("")
+        sc2.download_button("📥 Export CSV", data=csv_data, file_name="employee_directory.csv", mime="text/csv")
+        
+        st.write("")
+        
+        # Display Standard Formatted Full Table View (Exact original look)
+        display_df = df_all.copy()
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        st.write("---")
+        
+        # Edit & Documents Panel Below Table
+        st.subheader("⚙️ Quick Manage & Edit Employee Details")
+        
+        emp_list = list(df_all['emp_id'] + " - " + df_all['emp_name'])
+        selected_emp_str = st.selectbox("Select Employee to Edit / View Documents:", emp_list)
+        
+        if selected_emp_str:
+            sel_emp_id = selected_emp_str.split(" - ")[0]
+            emp_data = df_all[df_all['emp_id'] == sel_emp_id].iloc[0]
+
+            act_tab1, act_tab2 = st.tabs(["✏️ Edit Employee Details", "📂 View & Download Documents"])
+
+            # Edit Tab
+            with act_tab1:
+                with st.form(f"edit_form_{sel_emp_id}"):
+                    c1, c2, c3 = st.columns(3)
+                    e_name = c1.text_input("Employee Name", value=emp_data['emp_name'])
+                    e_mobile = c2.text_input("Mobile Number", value=emp_data['mobile'])
+                    e_status = c3.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
+
+                    c4, c5, c6 = st.columns(3)
+                    e_pemail = c4.text_input("Personal Email", value=emp_data['personal_email'])
+                    e_oemail = c5.text_input("Office Email", value=emp_data['office_email'])
+                    e_location = c6.text_input("Location", value=emp_data['location'])
+
+                    c7, c8, c9 = st.columns(3)
+                    e_aadhar = c7.text_input("Aadhar", value=emp_data['aadhar'])
+                    e_pan = c8.text_input("PAN", value=emp_data['pan'])
+                    e_inventory = c9.text_input("Inventory Details", value=emp_data['inventory_details'])
+
+                    btn_update = st.form_submit_button("Update Employee Details", type="primary")
+
+                    if btn_update:
+                        conn = get_db_connection()
+                        conn.cursor().execute("""
+                            UPDATE employees 
+                            SET emp_name=?, mobile=?, status=?, personal_email=?, office_email=?, location=?, aadhar=?, pan=?, inventory_details=?
+                            WHERE emp_id=?
+                        """, (e_name, e_mobile, e_status, e_pemail, e_oemail, e_location, e_aadhar, e_pan, e_inventory, sel_emp_id))
+                        conn.commit()
+                        conn.close()
+                        st.success("Employee Details Updated Successfully!")
+                        st.rerun()
+
+            # View Documents Tab
+            with act_tab2:
+                docs_raw = emp_data['documents_uploaded']
+                try:
+                    docs = json.loads(docs_raw) if docs_raw else []
+                except:
+                    docs = []
+
+                if not docs:
+                    st.info("Is employee ke koi documents upload nahi hain.")
+                else:
+                    for doc in docs:
+                        dc1, dc2, dc3 = st.columns([2, 3, 2])
+                        dc1.write(f"**Type:** {doc.get('type', 'Document')}")
+                        dc2.write(f"**Filename:** {doc.get('filename', '')}")
+                        
+                        file_path = doc.get('path', '')
+                        if os.path.exists(file_path):
+                            with open(file_path, "rb") as f:
+                                dc3.download_button("⬇️ Download File", data=f, file_name=doc['filename'], key=f"dl_{sel_emp_id}_{doc['filename']}")
+                        else:
+                            dc3.write("File available in text format")
 
 # ==============================================================================
-# 7. PAGE 4: LEAVE TRACKER
+# 7. LEAVE TRACKER (WITH 3-MONTH ELIGIBILITY CHECK)
 # ==============================================================================
 elif main_menu == "🍃 Leave Tracker":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Apply Leave</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
-    employees_list = pd.read_sql_query("SELECT emp_id, emp_name FROM employees WHERE status='Active'", conn)
+    employees_df = pd.read_sql_query("SELECT emp_id, emp_name, doj FROM employees WHERE status='Active'", conn)
     conn.close()
     
-    if len(employees_list) == 0:
-        st.warning("Pehle employee add karein leave apply karne ke liye.")
+    if len(employees_df) == 0:
+        st.warning("Pehle Active employees add karein.")
     else:
-        emp_options = {f"{row['emp_id']} - {row['emp_name']}": row['emp_id'] for _, row in employees_list.iterrows()}
-        
-        with st.form("apply_leave_form"):
-            selected_emp = st.selectbox("Select Employee", list(emp_options.keys()))
-            leave_type = st.selectbox("Leave Type", ["Casual Leave (CL)", "Sick Leave (SL)", "Paid Leave (PL)"])
-            c1, c2 = st.columns(2)
-            from_date = c1.date_input("From Date", value=date.today())
-            to_date = c2.date_input("To Date", value=date.today())
-            reason = st.text_area("Reason for Leave")
-            
-            submit_leave = st.form_submit_button("Submit Leave Request")
-            if submit_leave:
-                emp_id_val = emp_options[selected_emp]
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO leave_requests (emp_id, leave_type, from_date, to_date, reason)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (emp_id_val, leave_type, str(from_date), str(to_date), reason))
-                conn.commit()
-                conn.close()
-                st.success("Leave Request successfully submit ho gayi!")
+        emp_map = {f"{r['emp_id']} - {r['emp_name']}": r for _, r in employees_df.iterrows()}
+        selected_emp_key = st.selectbox("Select Employee", list(emp_map.keys()))
+        selected_emp = emp_map[selected_emp_key]
+
+        # Eligibility check (90 days / 3 months)
+        try:
+            doj_date = datetime.strptime(selected_emp['doj'], "%Y-%m-%d").date()
+            days_completed = (date.today() - doj_date).days
+        except:
+            days_completed = 100
+
+        if days_completed < 90:
+            st.error(f"⚠️ **Not Eligible:** Employee ko joining kiye hue 3 months (90 days) nahi hue hain. (Completed: {days_completed} days)")
+        else:
+            conn = get_db_connection()
+            bal = pd.read_sql_query("SELECT * FROM leave_balances WHERE emp_id=?", conn, params=(selected_emp['emp_id'],))
+            conn.close()
+
+            if len(bal) > 0:
+                b = bal.iloc[0]
+                st.info(f"📊 **Available Leaves:** Casual Leave (CL): **{b['cl']}** | Sick Leave (SL): **{b['sl']}** | Paid Leave (PL): **{b['pl']}** | Special Paid Leave: **{b['paid_leave']}**")
+
+            with st.form("apply_leave_form"):
+                leave_type = st.selectbox("Leave Type", ["Casual Leave (CL)", "Sick Leave (SL)", "Paid Leave (PL)", "Special Paid Leave"])
+                c1, c2 = st.columns(2)
+                from_date = c1.date_input("From Date", value=date.today())
+                to_date = c2.date_input("To Date", value=date.today())
+                reason = st.text_area("Reason for Leave")
+                
+                submit_leave = st.form_submit_button("Submit Leave Request", type="primary")
+                if submit_leave:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO leave_requests (emp_id, leave_type, from_date, to_date, reason)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (selected_emp['emp_id'], leave_type, str(from_date), str(to_date), reason))
+                    conn.commit()
+                    conn.close()
+                    st.success("Leave Request successfully submit ho gayi!")
 
 # ==============================================================================
-# 8. PAGE 5: LEAVE MANAGEMENT
+# 8. LEAVE MANAGEMENT
 # ==============================================================================
 elif main_menu == "📑 Leave Management":
-    st.markdown("<h2 style='color:#333; font-weight:400;'>Leave Approvals</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#333; font-weight:400;'>Leave Approvals & Management</h2>", unsafe_allow_html=True)
     
     conn = get_db_connection()
     df_requests = pd.read_sql_query("""
@@ -396,6 +525,7 @@ elif main_menu == "📑 Leave Management":
                         conn.cursor().execute("UPDATE leave_requests SET status='Approved' WHERE id=?", (row['id'],))
                         conn.commit()
                         conn.close()
+                        st.success("Leave Approved!")
                         st.rerun()
                         
                     if cb2.button("❌ Reject", key=f"rej_{row['id']}"):
