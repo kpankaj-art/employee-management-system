@@ -129,6 +129,9 @@ UPLOADS_DIR = "uploaded_documents"
 if not os.path.exists(UPLOADS_DIR):
     os.makedirs(UPLOADS_DIR)
 
+# Standard Inventory Items List
+ASSET_OPTIONS = ["Laptop", "Desktop", "Wireless Mouse", "Keyboard", "Headset / Headphones", "Company Mobile", "ID Card", "Access Card", "Laptop Bag"]
+
 # ==============================================================================
 # 2. DATABASE SETUP
 # ==============================================================================
@@ -189,7 +192,7 @@ def init_db():
 
 init_db()
 
-# Helper function to parse dates safely
+# Safe Date Parser
 def parse_date_safe(date_str, fallback=date.today()):
     if not date_str or date_str == 'None' or date_str == '':
         return fallback
@@ -198,17 +201,19 @@ def parse_date_safe(date_str, fallback=date.today()):
     except:
         return fallback
 
-# Dialog / Modal Function for Editing Employee & Viewing Documents
-@st.dialog("✏️ Manage Employee Record", width="large")
+# ==============================================================================
+# EDIT & DOCUMENT MODAL DIALOG
+# ==============================================================================
+@st.dialog("⚙️ Manage Employee Profile", width="large")
 def edit_employee_dialog(emp_data):
-    st.write(f"Managing Record for ID: **{emp_data['emp_id']}**")
+    st.caption(f"Employee ID: **{emp_data['emp_id']}** | Name: **{emp_data['emp_name']}**")
     
-    tab_edit, tab_docs = st.tabs(["✏️ Edit All Details", "📂 View / Download Documents"])
+    tab_edit, tab_docs = st.tabs(["✏️ Edit Profile & Assets", "📂 Manage & Upload Documents"])
 
-    # Tab 1: Edit ALL Employee Details
+    # ------------------ TAB 1: EDIT PROFILE & INVENTORY ------------------
     with tab_edit:
         with st.form("edit_modal_form"):
-            st.caption("Basic Information")
+            st.markdown("##### 👤 Personal & Contact Info")
             c1, c2, c3 = st.columns(3)
             e_name = c1.text_input("Name *", value=emp_data['emp_name'])
             e_status = c2.selectbox("Status", ["Active", "Inactive"], index=0 if emp_data['status']=='Active' else 1)
@@ -219,23 +224,39 @@ def edit_employee_dialog(emp_data):
             e_oemail = c5.text_input("Office Email", value=emp_data['office_email'])
             e_location = c6.text_input("Location", value=emp_data['location'])
 
-            st.caption("Identity & Emergency Details")
+            st.markdown("##### 🆔 Identity & Emergency Contact")
             c7, c8, c9, c10 = st.columns(4)
             e_aadhar = c7.text_input("Aadhar Number", value=emp_data['aadhar'])
             e_pan = c8.text_input("PAN Number", value=emp_data['pan'])
-            e_emg_name = c9.text_input("Emergency Contact Name", value=emp_data['emergency_name'])
+            e_emg_name = c9.text_input("Emergency Contact Person", value=emp_data['emergency_name'])
             e_emg_contact = c10.text_input("Emergency Contact Number", value=emp_data['emergency_contact'])
 
-            st.caption("Dates & Inventory")
+            st.markdown("##### 📅 Employment Dates")
             c11, c12, c13 = st.columns(3)
             e_dob = c11.date_input("Date of Birth (DOB)", value=parse_date_safe(emp_data['dob'], date(1998, 1, 19)))
             e_doj = c12.date_input("Date of Joining (DOJ)", value=parse_date_safe(emp_data['doj']))
             e_doe_str = c13.text_input("Date of Exit (DOE)", value=str(emp_data['doe']) if emp_data['doe'] and emp_data['doe']!='None' else "")
 
-            e_inventory = st.text_input("Inventory / Asset Details", value=emp_data['inventory_details'])
+            st.markdown("##### 💻 Asset & Inventory Management")
+            # Parsing existing inventory string into multiselect defaults
+            existing_inv_str = emp_data['inventory_details'] if emp_data['inventory_details'] else ""
+            existing_items = [i.strip() for i in existing_inv_str.split(",") if i.strip()]
+            
+            preset_selected = [item for item in existing_items if item in ASSET_OPTIONS]
+            custom_selected = [item for item in existing_items if item not in ASSET_OPTIONS]
 
-            save_btn = st.form_submit_button("Update All Details", type="primary")
+            selected_assets = st.multiselect("Assigned Assets", options=ASSET_OPTIONS, default=preset_selected)
+            other_assets = st.text_input("Other Assets / Serial Numbers (Optional)", value=", ".join(custom_selected), placeholder="e.g. Dell Monitor S/N 9821, Dongle")
+
+            save_btn = st.form_submit_button("💾 Save All Changes", type="primary")
+            
             if save_btn:
+                # Combine selected multiselect + custom text inputs
+                all_inv = selected_assets.copy()
+                if other_assets.strip():
+                    all_inv.append(other_assets.strip())
+                final_inv_str = ", ".join(all_inv)
+
                 conn = get_db_connection()
                 conn.cursor().execute("""
                     UPDATE employees 
@@ -244,37 +265,85 @@ def edit_employee_dialog(emp_data):
                     WHERE emp_id=?
                 """, (
                     e_name, e_status, e_mobile, e_pemail, e_oemail, e_location,
-                    e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, e_inventory,
+                    e_aadhar, e_pan, e_emg_name, e_emg_contact, str(e_dob), str(e_doj), e_doe_str, final_inv_str,
                     emp_data['emp_id']
                 ))
                 conn.commit()
                 conn.close()
-                st.success("Sari details update ho gayi hain!")
+                st.success("Sari details aur inventory update ho gayi!")
                 st.rerun()
 
-    # Tab 2: View and Download Uploaded Documents
+    # ------------------ TAB 2: DOCUMENTS UPLOAD & VIEW ------------------
+    with tab_edit:
+        pass  # standard fallback
+
     with tab_docs:
+        # Load Existing Docs
         docs_raw = emp_data['documents_uploaded']
         try:
-            docs = json.loads(docs_raw) if docs_raw else []
+            current_docs = json.loads(docs_raw) if docs_raw else []
         except:
-            docs = []
+            current_docs = []
 
-        if not docs:
-            st.warning("⚠️ Is employee ke koi documents upload nahi hain.")
+        st.markdown("##### 📤 Upload New Document")
+        with st.form("modal_upload_form"):
+            uc1, uc2 = st.columns([1, 2])
+            new_doc_type = uc1.selectbox("Document Category", ["Aadhar Card", "PAN Card", "Offer Letter", "Relieving Letter", "Markssheet", "Resume", "Other"])
+            new_file = uc2.file_uploader("Choose File", type=['pdf', 'png', 'jpg', 'jpeg', 'docx'])
+            
+            upload_submit = st.form_submit_button("⬆️ Upload Document")
+            
+            if upload_submit:
+                if new_file is not None:
+                    file_path = os.path.join(UPLOADS_DIR, f"{emp_data['emp_id']}_{new_doc_type}_{new_file.name}")
+                    with open(file_path, "wb") as buffer:
+                        buffer.write(new_file.getbuffer())
+                    
+                    # Append new doc metadata
+                    current_docs.append({
+                        "type": new_doc_type,
+                        "filename": new_file.name,
+                        "path": file_path,
+                        "uploaded_on": str(date.today())
+                    })
+                    
+                    conn = get_db_connection()
+                    conn.cursor().execute("UPDATE employees SET documents_uploaded=? WHERE emp_id=?", (json.dumps(current_docs), emp_data['emp_id']))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"{new_file.name} successfully upload ho gaya!")
+                    st.rerun()
+                else:
+                    st.error("Pehle file choose karein!")
+
+        st.markdown("---")
+        st.markdown("##### 📁 Existing Documents")
+
+        if not current_docs:
+            st.info("Abhi koi document uploaded nahi hai.")
         else:
-            st.success(f"📁 Total {len(docs)} document(s) uploaded:")
-            for idx, doc in enumerate(docs):
-                dc1, dc2, dc3 = st.columns([2, 3, 2])
-                dc1.write(f"**Type:** {doc.get('type', 'Document')}")
-                dc2.write(f"**File:** {doc.get('filename', '')}")
+            for idx, doc in enumerate(current_docs):
+                dc1, dc2, dc3, dc4 = st.columns([2, 3, 1.5, 1])
+                dc1.write(f"📄 **{doc.get('type', 'Document')}**")
+                dc2.caption(doc.get('filename', ''))
                 
+                # Download Button
                 file_path = doc.get('path', '')
                 if os.path.exists(file_path):
                     with open(file_path, "rb") as f:
-                        dc3.download_button("⬇️ Download", data=f, file_name=doc['filename'], key=f"dl_doc_{emp_data['emp_id']}_{idx}")
+                        dc3.download_button("⬇️ Download", data=f, file_name=doc['filename'], key=f"modal_dl_{emp_data['emp_id']}_{idx}")
                 else:
-                    dc3.caption("File link missing")
+                    dc3.caption("File Missing")
+                
+                # Delete Document Button
+                if dc4.button("🗑️", key=f"del_doc_{emp_data['emp_id']}_{idx}", help="Delete Document"):
+                    current_docs.pop(idx)
+                    conn = get_db_connection()
+                    conn.cursor().execute("UPDATE employees SET documents_uploaded=? WHERE emp_id=?", (json.dumps(current_docs), emp_data['emp_id']))
+                    conn.commit()
+                    conn.close()
+                    st.toast("Document deleted!")
+                    st.rerun()
 
 # ==============================================================================
 # 3. SIDEBAR NAVIGATION
@@ -315,7 +384,7 @@ if main_menu == "📊 Dashboard":
     active_emp = len(df_emp[df_emp['status'] == 'Active']) if total_emp > 0 else 0
     inactive_emp = len(df_emp[df_emp['status'] == 'Inactive']) if total_emp > 0 else 0
     
-    missing_docs_df = df_emp[(df_emp['documents_uploaded'].isna()) | (df_emp['documents_uploaded'] == '') | (df_emp['documents_uploaded'] == 'None')] if total_emp > 0 else pd.DataFrame()
+    missing_docs_df = df_emp[(df_emp['documents_uploaded'].isna()) | (df_emp['documents_uploaded'] == '') | (df_emp['documents_uploaded'] == 'None') | (df_emp['documents_uploaded'] == '[]')] if total_emp > 0 else pd.DataFrame()
     missing_docs_count = len(missing_docs_df)
     
     c1, c2, c3, c4 = st.columns(4)
@@ -383,7 +452,8 @@ elif main_menu == "➕ Add Employee":
         emp_status = d1.selectbox("Status", ["Active", "Inactive"])
 
         st.subheader("4. Inventory & Asset Details")
-        inventory = st.text_input("Inventory Assigned", placeholder="e.g. Laptop, Mouse")
+        selected_assets = st.multiselect("Select Assigned Assets", options=ASSET_OPTIONS)
+        custom_asset = st.text_input("Other Custom Assets (Optional)", placeholder="e.g. Monitor S/N 1234")
 
         st.subheader("5. Document Upload Center")
         doc_c1, doc_c2 = st.columns([1, 2])
@@ -396,13 +466,20 @@ elif main_menu == "➕ Add Employee":
             if not emp_id or not emp_name:
                 st.error("Employee ID aur Name mandatory hai!")
             else:
+                # Combine Inventory
+                inv_list = selected_assets.copy()
+                if custom_asset.strip():
+                    inv_list.append(custom_asset.strip())
+                final_inv = ", ".join(inv_list)
+
+                # Save Uploaded Files
                 saved_docs = []
                 if uploaded_files:
                     for f in uploaded_files:
                         file_path = os.path.join(UPLOADS_DIR, f"{emp_id}_{doc_type}_{f.name}")
                         with open(file_path, "wb") as buffer:
                             buffer.write(f.getbuffer())
-                        saved_docs.append({"type": doc_type, "filename": f.name, "path": file_path})
+                        saved_docs.append({"type": doc_type, "filename": f.name, "path": file_path, "uploaded_on": str(date.today())})
 
                 docs_str = json.dumps(saved_docs) if saved_docs else ""
 
@@ -416,7 +493,7 @@ elif main_menu == "➕ Add Employee":
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         emp_id, emp_name, emp_status, mobile, personal_email, office_email, aadhar, pan,
-                        emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), inventory, docs_str
+                        emergency_name, emergency_contact, location, str(doj), str(dob), str(doe), final_inv, docs_str
                     ))
                     
                     cursor.execute("""
@@ -432,7 +509,7 @@ elif main_menu == "➕ Add Employee":
                     conn.close()
 
 # ==============================================================================
-# 6. EMPLOYEE MASTER (CLEAN DATA TABLE WITH INLINE EDIT & DELETE)
+# 6. EMPLOYEE MASTER (TABLE VIEW WITH INLINE ACTIONS)
 # ==============================================================================
 elif main_menu == "👥 Employee Master":
     st.markdown("<h2 style='color:#333; font-weight:400;'>Employee Directory</h2>", unsafe_allow_html=True)
@@ -464,13 +541,13 @@ elif main_menu == "👥 Employee Master":
             h_cols[idx].markdown(f"**{head}**")
         st.markdown("<hr style='margin: 5px 0px; border-color: #ddd;'/>", unsafe_allow_html=True)
 
-        # Table Data Rows with Edit/Delete Buttons
+        # Table Data Rows
         for idx, row in df_all.iterrows():
             r_cols = st.columns(cols_width)
             
-            # Action Buttons Column (Edit & Delete)
+            # Action Buttons Column
             btn_col1, btn_col2 = r_cols[0].columns(2)
-            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & View Documents"):
+            if btn_col1.button("✏️", key=f"edit_{row['emp_id']}", help="Edit Record & Manage Documents"):
                 edit_employee_dialog(row)
             
             if btn_col2.button("🗑️", key=f"del_{row['emp_id']}", help="Delete Record"):
